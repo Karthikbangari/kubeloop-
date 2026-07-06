@@ -1,0 +1,69 @@
+[
+  {
+    "Namespace": "shop",
+    "Name": "checkout-api",
+    "Replicas": 1,
+    "Current": {
+      "CPU": 2000
+    },
+    "Usage": {
+      "P95CPU": 410,
+      "P99CPU": 480
+    },
+    "Meta": {
+      "Kind": "Deployment",
+      "HistoryDays": 30
+    }
+  },
+  {
+    "Namespace": "shop",
+    "Name": "recommendations",
+    "Replicas": 2,
+    "Current": {
+      "CPU": 4000
+    },
+    "Usage": {
+      "P95CPU": 800,
+      "P99CPU": 900
+    },
+    "Meta": {
+      "Kind": "Deployment",
+      "HistoryDays": 30
+    }
+  },
+  {
+    "Namespace": "shop",
+    "Name": "search",
+    "Replicas": 1,
+    "Current": {
+      "CPU": 1000,
+      "Mem": 2147483648
+    },
+    "Usage": {
+      "P95CPU": 300,
+      "P99CPU": 350,
+      "MaxMem": 524288000
+    },
+    "Meta": {
+      "Kind": "Deployment",
+      "HistoryDays": 30,
+      "Runtime": "jvm"
+    }
+  },
+  {
+    "Namespace": "batch",
+    "Name": "nightly",
+    "Meta": {
+      "Kind": "CronJob",
+      "HistoryDays": 30
+    }
+  },
+  {
+    "Namespace": "shop",
+    "Name": "new-svc",
+    "Meta": {
+      "Kind": "Deployment",
+      "HistoryDays": 3
+    }
+  }
+]

@@ -8,6 +8,9 @@ vendor/
 *.test
 *.out
 coverage.*
+/.gocache/
+/.gomodcache/
+/.tools/
 # env & editors
 .env
 .env.*
@@ -15,3 +18,6 @@ coverage.*
 .vscode/
 *.swp
 .DS_Store
+# agent runtime state & local snapshots
+/.claude/
+/kubeloop-repo.zip

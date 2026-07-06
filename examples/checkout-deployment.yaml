@@ -1,0 +1,15 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: checkout-api
+  namespace: shop
+spec:
+  template:
+    spec:
+      containers:
+        - name: app
+          image: myco/checkout:1.2
+          resources:
+            requests:
+              cpu: 2000m
+              memory: 0Mi
