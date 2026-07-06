@@ -1,0 +1,17 @@
+# binaries & build
+/kubeloop
+/bin/
+/dist/
+*.exe
+# go
+vendor/
+*.test
+*.out
+coverage.*
+# env & editors
+.env
+.env.*
+.idea/
+.vscode/
+*.swp
+.DS_Store

@@ -1,0 +1,24 @@
+# Holds ~300Mi in a Memory-medium emptyDir (tmpfs counts against the cgroup),
+# while requesting 2Gi -> realistic partial memory waste.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: recommendations
+  namespace: demo-waste
+spec:
+  replicas: 1
+  selector: { matchLabels: { app: recommendations } }
+  template:
+    metadata: { labels: { app: recommendations } }
+    spec:
+      volumes:
+        - name: cache
+          emptyDir: { medium: Memory, sizeLimit: 512Mi }
+      containers:
+        - name: app
+          image: alpine:3.20
+          command: ["sh", "-c", "dd if=/dev/zero of=/cache/fill bs=1M count=300 2>/dev/null; sleep infinity"]
+          volumeMounts:
+            - { name: cache, mountPath: /cache }
+          resources:
+            requests: { cpu: 500m, memory: 2Gi }

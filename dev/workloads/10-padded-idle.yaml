@@ -1,0 +1,69 @@
+# Four idle services with deliberately padded requests.
+# pause containers use ~0 CPU/mem -> clean, maximal waste signal.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: checkout-api
+  namespace: demo-waste
+spec:
+  replicas: 1
+  selector: { matchLabels: { app: checkout-api } }
+  template:
+    metadata: { labels: { app: checkout-api } }
+    spec:
+      containers:
+        - name: app
+          image: registry.k8s.io/pause:3.9
+          resources:
+            requests: { cpu: 750m, memory: 768Mi }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: image-resizer
+  namespace: demo-waste
+spec:
+  replicas: 1
+  selector: { matchLabels: { app: image-resizer } }
+  template:
+    metadata: { labels: { app: image-resizer } }
+    spec:
+      containers:
+        - name: app
+          image: registry.k8s.io/pause:3.9
+          resources:
+            requests: { cpu: 750m, memory: 768Mi }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: notifications
+  namespace: demo-waste
+spec:
+  replicas: 1
+  selector: { matchLabels: { app: notifications } }
+  template:
+    metadata: { labels: { app: notifications } }
+    spec:
+      containers:
+        - name: app
+          image: registry.k8s.io/pause:3.9
+          resources:
+            requests: { cpu: 750m, memory: 768Mi }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: search-api
+  namespace: demo-waste
+spec:
+  replicas: 1
+  selector: { matchLabels: { app: search-api } }
+  template:
+    metadata: { labels: { app: search-api } }
+    spec:
+      containers:
+        - name: app
+          image: registry.k8s.io/pause:3.9
+          resources:
+            requests: { cpu: 750m, memory: 768Mi }

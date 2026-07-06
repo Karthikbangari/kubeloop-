@@ -1,0 +1,20 @@
+# Runs briefly every 10 minutes. kubeloop must EXCLUDE this by default
+# (spiky-by-nature) with a printed reason -- this manifest tests that.
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: nightly-report
+  namespace: demo-waste
+spec:
+  schedule: "*/10 * * * *"
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          restartPolicy: Never
+          containers:
+            - name: job
+              image: busybox:1.36
+              command: ["sh", "-c", "echo report done; sleep 5"]
+              resources:
+                requests: { cpu: 200m, memory: 64Mi }

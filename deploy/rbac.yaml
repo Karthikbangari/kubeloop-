@@ -1,0 +1,34 @@
+# Read-only access for kubeloop. No write verbs, ever.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: kubeloop
+  namespace: default
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: kubeloop-readonly
+rules:
+  - apiGroups: [""]
+    resources: [pods, nodes, namespaces]
+    verbs: [get, list, watch]
+  - apiGroups: [apps]
+    resources: [deployments, statefulsets, replicasets, daemonsets]
+    verbs: [get, list, watch]
+  - apiGroups: [batch]
+    resources: [jobs, cronjobs]
+    verbs: [get, list, watch]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: kubeloop-readonly
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: kubeloop-readonly
+subjects:
+  - kind: ServiceAccount
+    name: kubeloop
+    namespace: default
