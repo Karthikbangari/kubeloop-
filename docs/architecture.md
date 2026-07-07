@@ -45,9 +45,19 @@ pr ──► yaml.v3                              (PR-engine offline path:
 - **PR writes are source-only** — `internal/pr` prepares patched manifest content and PR text; it never writes to a cluster or opens a network connection.
 - **Read-only** — no package writes to a cluster; the only planned write path is a human-reviewed PR.
 
-## Not built yet (environment/dependency-gated)
-- **Live read-layer**: the kube API client (`apimachinery` for `resource.Quantity` parsing) and the Prometheus HTTP client + validated PromQL. `inventory` and `promusage` are the offline-proven halves these wrap.
-- **PR engine tail**: Helm/Kustomize rendered-to-source mapping and GitHub PR creation. The offline raw-YAML locator, patcher, composer, and prepare step exist in `internal/pr`.
+## Read-layer status (offline halves proven; live I/O gated)
+The read-layer is built and tested offline, piece by piece; only the two calls
+that need a real cluster remain. Built (in `playground/`, awaiting graduation
+per RULEBOOK.md #58–#61, unless noted):
+- **Prometheus HTTP client** (`promclient`) — read-only `/api/v1/query` GET + parse. Proven with `httptest`.
+- **usage parsing** (`promusage`, graduated) — Prometheus response → scalar → `rs.Usage`.
+- **quantity parsing** (`quantityparse`) — `"2000m"`/`"512Mi"` → millicores/bytes, correct-or-error. Done *without* `apimachinery` (project stays lightweight); the inverse of `internal/pr/quantity`.
+- **kube-object parsing** (`kubeparse`) — a serialized Deployment/StatefulSet → `inventory.Container`s.
+- **manifest→scan bridge** (`manifestsource`) — composes the above into a `scan.Input`, proven end-to-end into `scan.Scan`.
+
+## Not built yet (needs a real cluster / token)
+- **Live I/O**: the kube API **LIST** call (a client wrapping `kubeparse`) and **validated PromQL** query strings (need a real Prometheus to confirm; `promclient` takes the query as input for exactly this reason).
+- **PR engine tail**: Helm/Kustomize rendered-to-source mapping and GitHub PR creation. The offline raw-YAML locator, patcher, composer, prepare, and guards exist in `internal/pr`.
 - **Hosted tier**: continuous scans, policy-gated auto-PRs, verified-savings ledger.
 
 ## Known limitations (revisit with the live read-layer)

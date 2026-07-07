@@ -33,6 +33,13 @@ When Claude Code adds, pushes, or changes anything, Codex automatically checks `
 ## Log
 Newest first. One entry per playground change.
 
+### #62 — 2026-07-06 — docs: architecture reflects real read-layer status
+- **What:** the architecture doc's "Not built yet" claimed the Prometheus client and `apimachinery` quantity parsing didn't exist — both now do (`promclient`, `quantityparse`, `kubeparse`, `manifestsource`, built #58–#61). Rewrote it into a "Read-layer status" section listing the built offline halves and a tightened "Not built yet" naming only the genuinely cluster-gated remnants (live kube LIST, validated PromQL, GitHub PR creation).
+- **Why:** the doc is public-facing and had drifted from reality; correcting it (no logic-review burden) rather than piling an 8th feature slice onto a 7-deep Codex queue.
+- **Files:** `docs/architecture.md` (doc only, no code).
+- **Verified:** doc content matches the shipped/playground packages; `make ci` still green (unchanged code).
+- **Codex status:** ⬜ awaiting review (doc).
+
 ### #61 — 2026-07-06 — build slice: manifest→scan.Input bridge (slice-27, read-layer capstone)
 - **What:** `manifestsource.FromManifest(json, usage, historyDays)` composes the whole offline read path — `kubeparse.Parse` → `inventory.PodRequest`/`DetectRuntime` → `scan.Input`. Current requests come from the manifest, runtime from the images/commands, usage from the caller (the live reader supplies it from Prometheus).
 - **Why:** capstone integration proving all the read-layer pieces (kubeparse, quantityparse, inventory) compose into the existing scanner. Only the live kube LIST + Prometheus PromQL remain to swap in.
