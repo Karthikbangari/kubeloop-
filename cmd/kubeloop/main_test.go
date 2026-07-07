@@ -57,6 +57,28 @@ func TestRun_JSONSchema(t *testing.T) {
 	}
 }
 
+func TestRun_JSONIncludesCaution(t *testing.T) {
+	// The public JSON schema must carry the safety caution so machine consumers
+	// (building their own automation) see the JVM warning, like the PR body does.
+	dir := t.TempDir()
+	in := filepath.Join(dir, "in.json")
+	body := `[{"Namespace":"shop","Name":"search","Replicas":1,"Current":{"CPU":1000,"Mem":2147483648},"Usage":{"P95CPU":300,"P99CPU":350,"MaxMem":524288000},"Meta":{"Kind":"Deployment","HistoryDays":30,"Runtime":"jvm"}}]`
+	if err := os.WriteFile(in, []byte(body), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	var out bytes.Buffer
+	if err := Run([]string{"--json", "--from-file", in}, &out); err != nil {
+		t.Fatal(err)
+	}
+	var r jsonReport
+	if err := json.Unmarshal(out.Bytes(), &r); err != nil {
+		t.Fatalf("invalid JSON: %v", err)
+	}
+	if len(r.Workloads) != 1 || !strings.Contains(r.Workloads[0].Caution, "JVM") {
+		t.Errorf("JSON should carry the JVM caution, got %+v", r.Workloads)
+	}
+}
+
 func TestRun_PerRequestChangesRealization(t *testing.T) {
 	var out bytes.Buffer
 	if err := Run([]string{"--per-request", "--from-file", sampleFile(t)}, &out); err != nil {

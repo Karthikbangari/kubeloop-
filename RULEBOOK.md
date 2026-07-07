@@ -33,6 +33,13 @@ When Claude Code adds, pushes, or changes anything, Codex automatically checks `
 ## Log
 Newest first. One entry per playground change.
 
+### #57 — 2026-07-06 — verify + coverage: `--json` carries caution/reasons (pinned)
+- **What:** verified the `--json` schema is honest for machine consumers — it already includes the JVM `caution` (omitempty) and per-workload exclusion `reason`s (unlike the PR body before #56). No bug. But no test pinned the caution field, so a refactor could silently drop it; added `TestRun_JSONIncludesCaution` (JVM input → JSON `caution` mentions "JVM").
+- **Why:** the JSON is a public contract; the safety caution must survive there for anyone automating off `--json`.
+- **Files:** `cmd/kubeloop/main_test.go` (test only, no behavior change).
+- **Verified:** new test passes; `go vet ./...` clean; `go test ./...` green.
+- **Codex status:** ⬜ awaiting review.
+
 ### #56 — 2026-07-06 — bug-hunt + FIX: PR dropped the JVM (safety) caution
 - **What (finding):** `kubeloop pr` on a JVM workload patches memory 2Gi→628Mi (a 3.3× cut) but the PR body had **no mention** of the JVM caution that scan shows ("memory is heap-configured, not usage-driven"). The reviewer approving the PR — the human the whole read-only design relies on — never saw the warning. `pr.Change`/`Request` carried `Confidence` but not the caution.
 - **What (fix):** added `Caution` to `pr.Change` and `pr.Request`, rendered it as a prominent `> ⚠ **Caution:** …` blockquote in the PR body, and wired `cmd/kubeloop pr` to pass `row.Caution` (from `safety.Score`) through. Independent of #55's pending files (`compose.go`/`prepare.go`/`main.go` weren't in it).
