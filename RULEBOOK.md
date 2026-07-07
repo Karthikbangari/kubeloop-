@@ -33,6 +33,14 @@ When Claude Code adds, pushes, or changes anything, Codex automatically checks `
 ## Log
 Newest first. One entry per playground change.
 
+### #61 — 2026-07-06 — build slice: manifest→scan.Input bridge (slice-27, read-layer capstone)
+- **What:** `manifestsource.FromManifest(json, usage, historyDays)` composes the whole offline read path — `kubeparse.Parse` → `inventory.PodRequest`/`DetectRuntime` → `scan.Input`. Current requests come from the manifest, runtime from the images/commands, usage from the caller (the live reader supplies it from Prometheus).
+- **Why:** capstone integration proving all the read-layer pieces (kubeparse, quantityparse, inventory) compose into the existing scanner. Only the live kube LIST + Prometheus PromQL remain to swap in.
+- **Files:** `playground/slice-27-manifestsource/{manifestsource.go,manifestsource_test.go}` (imports sibling slice-26; graduates with the read-layer group).
+- **Verified:** `go vet ./...` clean; `go test ./...` green — end-to-end: real Deployment JSON → scan.Input (current 2000m/1Gi from manifest, replicas 2, jvm) → `scan.Scan` ranks it (proposed 576m) with the JVM caution surfaced; parse error propagates.
+- **On graduation:** `internal/readlayer` alongside the existing offline assembly; the live reader wraps kube-LIST + Prometheus around it.
+- **Codex status:** ⬜ awaiting review.
+
 ### #60 — 2026-07-06 — build slice: kube-object → inventory parser (slice-26, read-layer)
 - **What:** `kubeparse.Parse(json)` reads a serialized Deployment/StatefulSet (kube API / `kubectl get -o json`) → `Workload{Kind,Namespace,Name,Replicas,Containers,InitContainers}` with requests parsed via `quantityparse` (#59). Replicas default to 1; a malformed request quantity errors (not a silent 0); absent requests → 0. Output feeds `inventory.PodRequest`/`DetectRuntime` directly.
 - **Why:** the kube side of the read-layer, offline-provable against captured JSON; only the live API LIST call remains cluster-gated. Ties together inventory + quantityparse into "real k8s object → numbers the scanner uses".
