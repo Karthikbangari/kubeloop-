@@ -33,6 +33,15 @@ When Claude Code adds, pushes, or changes anything, Codex automatically checks `
 ## Log
 Newest first. One entry per playground change.
 
+### #64 — 2026-07-06 — bug-hunt + primitive: classify waste vs under-provisioned (slice-29)
+- **What (finding):** `kubeloop scan` lists an under-provisioned workload (usage > request) in the dollar-ranked *waste* table showing a scary *increase* proposal (e.g. `500m → 2880m`) at $0.00 — off-message for a "save money" tool and could mislead anyone applying proposals wholesale into raising cost. (The PR path is already safe via reduce-only/no-op, so this is scan-display honesty, not a safety bug.)
+- **What (primitive):** `classify.Classify(current, proposed)` → `Waste` (something reduces → real savings), `UnderProvisioned` (nothing reduces, something increases → needs more), or `RightSized` (equal). A CPU-only request whose CPU reduces stays `Waste` even if memory nominally increases from 0.
+- **Why:** the report should rank waste and flag under-provisioning as a distinct risk, not blend them.
+- **Files:** `playground/slice-29-classify/{classify.go,classify_test.go}`.
+- **Verified:** `go vet ./...` clean; `go test ./...` green — reduces/both-reduce/mixed→waste, both-increase/cpu-increase→under-provisioned, equal→right-sized.
+- **Next cycle (completes the fix):** wire into `scan.Scan`/`reporting.Render`/JSON — partition under-provisioned + right-sized out of the waste ranking into their own honest section; update fixtures/tests.
+- **Codex status:** ⬜ awaiting review.
+
 ### #63 — 2026-07-06 — build slice: directory-of-manifests source (slice-28, read-layer)
 - **What:** `dirsource.Assemble(manifests, usage)` composes many manifests + a `namespace/name`→usage lookup into `[]scan.Input` (via kubeparse+manifestsource) — the offline "GitOps manifests + Prometheus usage export" scan mode. A workload with no usage entry gets zero usage and is excluded by the missing-signal rule (#55), so an un-instrumented workload is reported, never sized on no data.
 - **Why:** the read-layer pieces handled one manifest; this is the multi-workload composition — a genuine offline capability distinct from the flat `--from-file` (which needs pre-aggregated pod-level data). Disk globbing is trivial glue on top of the pure `Assemble`.
