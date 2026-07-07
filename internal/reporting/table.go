@@ -76,7 +76,7 @@ func Render(rows []Row, total float64) string {
 		fmt.Fprintln(w, line)
 	}
 	w.Flush()
-	fmt.Fprintf(&b, "\nEstimated waste: $%.2f/month across %d workloads.\n", total, len(rows))
+	fmt.Fprintf(&b, "\nEstimated waste: $%.2f/month across %s.\n", total, Plural(len(rows), "workload"))
 	for i, r := range rows {
 		if r.Caution != "" {
 			fmt.Fprintf(&b, "  ! %s: %s\n", lbls[i], r.Caution)
@@ -93,6 +93,15 @@ func rowLabels(rows []Row) []string {
 		items[i] = labels.Item{Namespace: r.Namespace, Name: r.Name}
 	}
 	return labels.Qualify(items)
+}
+
+// Plural formats a count with its noun, adding "s" for anything but 1:
+// Plural(1,"workload") == "1 workload", Plural(2,"workload") == "2 workloads".
+func Plural(n int, singular string) string {
+	if n == 1 {
+		return fmt.Sprintf("%d %s", n, singular)
+	}
+	return fmt.Sprintf("%d %ss", n, singular)
 }
 
 func resStr(r rs.Resources) string { return fmt.Sprintf("%dm/%s", r.CPU, memStr(r.Mem)) }

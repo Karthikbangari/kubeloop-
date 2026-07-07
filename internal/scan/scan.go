@@ -97,7 +97,7 @@ func Render(r Report) string {
 		}
 	}
 	if r.RightSized > 0 {
-		fmt.Fprintf(&b, "\n%d workload(s) already right-sized.\n", r.RightSized)
+		fmt.Fprintf(&b, "\n%s already right-sized.\n", rp.Plural(r.RightSized, "workload"))
 	}
 	if len(r.Excluded) > 0 {
 		items := make([]labels.Item, len(r.Excluded))

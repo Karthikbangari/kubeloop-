@@ -57,3 +57,12 @@ func TestLoadPrice_BadFileErrors(t *testing.T) {
 		t.Error("want error on missing file")
 	}
 }
+
+func TestPlural(t *testing.T) {
+	cases := map[int]string{0: "0 workloads", 1: "1 workload", 2: "2 workloads"}
+	for n, want := range cases {
+		if got := Plural(n, "workload"); got != want {
+			t.Errorf("Plural(%d) = %q, want %q", n, got, want)
+		}
+	}
+}

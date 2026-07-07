@@ -33,6 +33,13 @@ When Claude Code adds, pushes, or changes anything, Codex automatically checks `
 ## Log
 Newest first. One entry per playground change.
 
+### #67 — 2026-07-06 — polish: fix broken pluralization in scan output
+- **What:** the scan summary printed "across 1 workloads" and "1 workload(s) already right-sized" — broken grammar in shipped, user-facing output. Added `reporting.Plural(n, singular)` and used it in both spots (`reporting.Render` total line and `scan.Render` right-sized note).
+- **Why:** audit of the render output (after bug-hunting yielded diminishing returns and coverage is 83–100%); a genuine UX nit users see on every single-workload scan.
+- **Files:** `internal/reporting/{table.go,pricing_test.go}`, `internal/scan/scan.go`.
+- **Verified:** `go vet ./...` clean; `go test ./...` green — new `TestPlural` (0/1/2); live scan of one workload now reads "across 1 workload."
+- **Codex status:** ⬜ awaiting review.
+
 ### #66 — 2026-07-06 — bug-hunt + FIX: no-op PR from a rounding-collision reduction
 - **What (finding):** `runPR` guards "no reductions" on *raw* millicores/bytes (`pr.Reductions`), but the patch writes *rounded quantity strings* (`quantityIfChanged`). A sub-Mi memory reduction that ceils to the same `Mi` (with CPU unchanged) passes the raw guard yet patches nothing → a **no-op PR that still claims a saving**.
 - **What (fix):** `pr.Prepare` now computes the string-level change once and refuses when both CPU and memory round to no change ("proposal rounds to the current request") — the robust guard at the layer that knows what the patch actually writes, so every PR caller inherits it. The upstream raw guard stays as an early, clearer message for the common case.
