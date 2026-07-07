@@ -150,6 +150,18 @@ func TestRun_RejectsUnknownInputField(t *testing.T) {
 	}
 }
 
+func TestRun_RejectsTrailingInputJSON(t *testing.T) {
+	dir := t.TempDir()
+	in := filepath.Join(dir, "in.json")
+	if err := os.WriteFile(in, []byte(sample+"[]"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	err := Run([]string{"--from-file", in}, &bytes.Buffer{})
+	if err == nil || !strings.Contains(err.Error(), "trailing JSON") {
+		t.Fatalf("want trailing JSON error, got %v", err)
+	}
+}
+
 const prManifest = `apiVersion: apps/v1
 kind: Deployment
 metadata:

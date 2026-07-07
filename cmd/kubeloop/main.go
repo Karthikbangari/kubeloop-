@@ -191,5 +191,9 @@ func loadInputs(path string) ([]scan.Input, error) {
 	if err := dec.Decode(&inputs); err != nil {
 		return nil, fmt.Errorf("parse %s: %w", path, err)
 	}
+	var extra any
+	if err := dec.Decode(&extra); err != io.EOF {
+		return nil, fmt.Errorf("parse %s: trailing JSON data", path)
+	}
 	return inputs, nil
 }
