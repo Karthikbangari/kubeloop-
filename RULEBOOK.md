@@ -33,6 +33,13 @@ When Claude Code adds, pushes, or changes anything, Codex automatically checks `
 ## Log
 Newest first. One entry per playground change.
 
+### #69 — 2026-07-06 — robustness FIX: reject unknown pricing.json fields (same class as #68)
+- **What:** `reporting.LoadPrice` used plain `json.Unmarshal`, so an unknown key in `--pricing-file` (e.g. `"cpuRate"`) was silently dropped and the override never applied — the user's negotiated rates ignored with no error. Now decodes with `DisallowUnknownFields`.
+- **Why:** same silent-wrong class as #68 (`--from-file` typos); a mistyped pricing key should fail loud, not quietly use list defaults. Noted the case-variant nuance: `"perVcpuHour"` case-insensitively binds to `perVCPUHour` and is *not* an error (json accepts it, value is correct).
+- **Files:** `internal/reporting/{pricing.go,pricing_test.go}`.
+- **Verified:** `go vet ./...` clean; `go test ./...` green — new `TestLoadPrice_RejectsUnknownField`; live: `cpuRate` errors with exit 1, valid pricing file still applies. (Codex's #68 follow-up rejecting trailing JSON committed separately this cycle.)
+- **Codex status:** ⬜ awaiting review.
+
 ### #68 — 2026-07-06 — robustness FIX: reject unknown --from-file fields (fail loud on typos)
 - **What (finding):** a misspelled input field (e.g. `"MaxMemory"` for `"MaxMem"`) was silently ignored by `json.Unmarshal` → usage zeroed → the workload **silently excluded** with a misleading "no measured memory usage — metrics gap" reason, sending the user to debug a metrics problem that's really a typo.
 - **What (fix):** `loadInputs` now decodes with `DisallowUnknownFields`, so any unknown/misspelled key errors clearly (`unknown field "MaxMemory"`). Fail-loud on malformed input is the right posture for a trust tool.

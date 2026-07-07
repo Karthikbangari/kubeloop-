@@ -1,6 +1,7 @@
 package reporting
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -69,8 +70,12 @@ func LoadPrice(cloud, file string) (rs.Price, error) {
 	if err != nil {
 		return rs.Price{}, err
 	}
+	// Reject unknown fields so a mistyped key (e.g. "perVcpuHour") errors instead
+	// of silently ignoring the override and using default prices.
+	dec := json.NewDecoder(bytes.NewReader(b))
+	dec.DisallowUnknownFields()
 	var f PriceFile
-	if err := json.Unmarshal(b, &f); err != nil {
+	if err := dec.Decode(&f); err != nil {
 		return rs.Price{}, fmt.Errorf("parse %s: %w", file, err)
 	}
 	r, ok := f.Clouds[cloud]

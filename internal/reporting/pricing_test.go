@@ -3,6 +3,7 @@ package reporting
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -64,5 +65,18 @@ func TestPlural(t *testing.T) {
 		if got := Plural(n, "workload"); got != want {
 			t.Errorf("Plural(%d) = %q, want %q", n, got, want)
 		}
+	}
+}
+
+func TestLoadPrice_RejectsUnknownField(t *testing.T) {
+	p := filepath.Join(t.TempDir(), "pricing.json")
+	// "cpuRate" matches no PriceRate field — must error, not silently fall back
+	// to default prices. (Case variants like "perVcpuHour" bind fine and aren't
+	// typos as far as encoding/json is concerned.)
+	if err := os.WriteFile(p, []byte(`{"clouds":{"aws":{"cpuRate":0.5}}}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := LoadPrice("aws", p); err == nil || !strings.Contains(err.Error(), "unknown field") {
+		t.Fatalf("want unknown-field error, got %v", err)
 	}
 }
