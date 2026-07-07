@@ -57,6 +57,23 @@ func TestPrepare_EndToEnd(t *testing.T) {
 	}
 }
 
+// A reduction that rounds to the same quantity string (CPU unchanged, memory
+// "reduces" but both sides are already "501Mi") must be refused, not emitted as
+// a no-op PR. The upstream raw-unit guard can't catch this; this string-level
+// guard does. (singleContainerDoc is defined in guards_test.go, same package.)
+func TestPrepare_RefusesRoundingNoOp(t *testing.T) {
+	_, err := Prepare(Request{
+		Files:       []File{{Path: "d.yaml", Content: []byte(singleContainerDoc)}},
+		Ref:         Ref{Kind: "Deployment", Name: "app", Namespace: "shop"},
+		Container:   "app",
+		CurrentCPU:  "2000m", ProposedCPU: "", // CPU unchanged
+		CurrentMem: "501Mi", ProposedMem: "501Mi", // same string → no real change
+	})
+	if err == nil || !strings.Contains(err.Error(), "rounds to the current request") {
+		t.Fatalf("want no-effective-change refusal, got %v", err)
+	}
+}
+
 func TestPrepare_PropagatesLocateError(t *testing.T) {
 	r := req()
 	r.Ref.Name = "missing"

@@ -33,6 +33,14 @@ When Claude Code adds, pushes, or changes anything, Codex automatically checks `
 ## Log
 Newest first. One entry per playground change.
 
+### #66 — 2026-07-06 — bug-hunt + FIX: no-op PR from a rounding-collision reduction
+- **What (finding):** `runPR` guards "no reductions" on *raw* millicores/bytes (`pr.Reductions`), but the patch writes *rounded quantity strings* (`quantityIfChanged`). A sub-Mi memory reduction that ceils to the same `Mi` (with CPU unchanged) passes the raw guard yet patches nothing → a **no-op PR that still claims a saving**.
+- **What (fix):** `pr.Prepare` now computes the string-level change once and refuses when both CPU and memory round to no change ("proposal rounds to the current request") — the robust guard at the layer that knows what the patch actually writes, so every PR caller inherits it. The upstream raw guard stays as an early, clearer message for the common case.
+- **Why:** a PR must never claim a reduction it doesn't make; belt-and-suspenders across the raw and string layers.
+- **Files:** `internal/pr/{prepare.go,prepare_test.go}`.
+- **Verified:** `go vet ./...` clean; `go test ./...` green — new `TestPrepare_RefusesRoundingNoOp` (CPU unchanged + memory `501Mi`→`501Mi`); existing PR/scan/cli tests unaffected.
+- **Codex status:** ⬜ awaiting review.
+
 ### #65 — 2026-07-06 — GRADUATE classify + FIX: under-provisioned out of the waste ranking
 - **What:** completed the #64 fix. Graduated `classify` → `internal/classify`, then wired it through: `scan.Scan` partitions ranked rows into `Rows` (waste, ranked), `Underprovisioned` (usage > request), and a `RightSized` count. `scan.Render` shows an "Under-provisioned (needs more, not waste)" section + a right-sized count; `--json` gains `underProvisioned` + `rightSizedCount` (via a shared `mapRows`). Removed `playground/slice-29-classify/`.
 - **Why:** a "save money" report must not list an *increase* proposal (e.g. `500m→2880m` at $0) in the waste table. Now under-provisioning is surfaced as a distinct risk; the PR path already refused it, and now refuses earlier ("no rankable workload") since it's out of `Rows`.

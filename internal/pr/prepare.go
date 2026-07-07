@@ -1,5 +1,7 @@
 package pr
 
+import "fmt"
+
 // Request is one workload's proposed change plus the repo files to search.
 type Request struct {
 	Files                    []File
@@ -33,9 +35,17 @@ func Prepare(r Request) (Prepared, error) {
 	if err := RequireSingleContainer(src.Content); err != nil {
 		return Prepared{}, err
 	}
+	// Decide what actually changes at the quantity-string level (what the patch
+	// writes), not the raw numeric level. A sub-Mi reduction can round to the
+	// same string — refuse rather than emit a no-op PR that claims a saving.
+	cpu := quantityIfChanged(r.CurrentCPU, r.ProposedCPU)
+	mem := quantityIfChanged(r.CurrentMem, r.ProposedMem)
+	if cpu == "" && mem == "" {
+		return Prepared{}, fmt.Errorf("no effective request change for %q — the proposal rounds to the current request", r.Ref.Name)
+	}
 	patched, err := Patch(src.Content, Target{
 		Kind: r.Ref.Kind, Name: r.Ref.Name, Namespace: r.Ref.Namespace, Container: r.Container,
-	}, quantityIfChanged(r.CurrentCPU, r.ProposedCPU), quantityIfChanged(r.CurrentMem, r.ProposedMem))
+	}, cpu, mem)
 	if err != nil {
 		return Prepared{}, err
 	}
