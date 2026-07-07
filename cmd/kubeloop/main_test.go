@@ -239,7 +239,9 @@ func TestRun_PRErrorsWhenWorkloadNameAmbiguous(t *testing.T) {
 	}
 }
 
-func TestRun_PRErrorsWhenNoReductions(t *testing.T) {
+// An under-provisioned workload (usage > request) is not in the waste ranking,
+// so pr refuses it up front rather than emitting a no-op or an increase.
+func TestRun_PRRefusesUnderProvisioned(t *testing.T) {
 	dir := t.TempDir()
 	in := filepath.Join(dir, "in.json")
 	body := `[
@@ -262,8 +264,8 @@ func TestRun_PRErrorsWhenNoReductions(t *testing.T) {
 		"--container", "app",
 		"--out", filepath.Join(dir, "patched.yaml"),
 	}, &bytes.Buffer{})
-	if err == nil || !strings.Contains(err.Error(), "no request reductions") {
-		t.Fatalf("want no-reductions error, got %v", err)
+	if err == nil || !strings.Contains(err.Error(), "no rankable workload") {
+		t.Fatalf("want under-provisioned workload refused as not-rankable, got %v", err)
 	}
 }
 

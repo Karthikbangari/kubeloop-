@@ -62,6 +62,26 @@ func TestRender_ExcludedNamesDisambiguateOnCollision(t *testing.T) {
 	}
 }
 
+func TestScan_PartitionsUnderProvisioned(t *testing.T) {
+	dep := sf.Meta{Kind: "Deployment", HistoryDays: 30}
+	in := []Input{
+		// real waste: 2000m → 576m
+		{Workload: rp.Workload{Namespace: "s", Name: "wasteful", Replicas: 1, Current: rs.Resources{CPU: 2000, Mem: 1 << 30}, Usage: rs.Usage{P95CPU: 410, P99CPU: 480, MaxMem: 300 << 20}}, Meta: dep},
+		// under-provisioned: current 500m but usage forces proposal up
+		{Workload: rp.Workload{Namespace: "s", Name: "starved", Replicas: 1, Current: rs.Resources{CPU: 500, Mem: 256 << 20}, Usage: rs.Usage{P95CPU: 2000, P99CPU: 2400, MaxMem: 512 << 20}}, Meta: dep},
+	}
+	r := Scan(in, rs.Percentile{}, rs.Price{PerMilliCPUHour: 0.0001}, savings.NodeBased)
+	if len(r.Rows) != 1 || r.Rows[0].Name != "wasteful" {
+		t.Fatalf("waste rows = %+v, want only wasteful", r.Rows)
+	}
+	if len(r.Underprovisioned) != 1 || r.Underprovisioned[0].Name != "starved" {
+		t.Fatalf("under-provisioned = %+v, want starved", r.Underprovisioned)
+	}
+	if got := Render(r); !strings.Contains(got, "Under-provisioned") || !strings.Contains(got, "starved") {
+		t.Errorf("render should flag the under-provisioned workload:\n%s", got)
+	}
+}
+
 func TestScan_JVMGetsCaution(t *testing.T) {
 	in := []Input{{
 		Workload: rp.Workload{Namespace: "shop", Name: "search", Replicas: 1, Current: rs.Resources{CPU: 1000, Mem: 2 * 1024 * 1024 * 1024}, Usage: rs.Usage{P95CPU: 300, P99CPU: 350, MaxMem: 500 * 1024 * 1024}},

@@ -33,6 +33,13 @@ When Claude Code adds, pushes, or changes anything, Codex automatically checks `
 ## Log
 Newest first. One entry per playground change.
 
+### #65 — 2026-07-06 — GRADUATE classify + FIX: under-provisioned out of the waste ranking
+- **What:** completed the #64 fix. Graduated `classify` → `internal/classify`, then wired it through: `scan.Scan` partitions ranked rows into `Rows` (waste, ranked), `Underprovisioned` (usage > request), and a `RightSized` count. `scan.Render` shows an "Under-provisioned (needs more, not waste)" section + a right-sized count; `--json` gains `underProvisioned` + `rightSizedCount` (via a shared `mapRows`). Removed `playground/slice-29-classify/`.
+- **Why:** a "save money" report must not list an *increase* proposal (e.g. `500m→2880m` at $0) in the waste table. Now under-provisioning is surfaced as a distinct risk; the PR path already refused it, and now refuses earlier ("no rankable workload") since it's out of `Rows`.
+- **Files:** `internal/classify/*`, `internal/scan/{scan.go,scan_test.go}`, `cmd/kubeloop/{json.go,main_test.go}`; deleted `playground/slice-29-classify/`.
+- **Verified:** `go vet ./...` clean; `go test ./...` green — new `TestScan_PartitionsUnderProvisioned`, updated `TestRun_PRRefusesUnderProvisioned`; live: under-provisioned workload flagged separately, waste table shows only real reductions; README example ($200.34/3, all waste) unchanged.
+- **Codex status:** ⬜ awaiting review.
+
 ### #64 — 2026-07-06 — bug-hunt + primitive: classify waste vs under-provisioned (slice-29)
 - **What (finding):** `kubeloop scan` lists an under-provisioned workload (usage > request) in the dollar-ranked *waste* table showing a scary *increase* proposal (e.g. `500m → 2880m`) at $0.00 — off-message for a "save money" tool and could mislead anyone applying proposals wholesale into raising cost. (The PR path is already safe via reduce-only/no-op, so this is scan-display honesty, not a safety bug.)
 - **What (primitive):** `classify.Classify(current, proposed)` → `Waste` (something reduces → real savings), `UnderProvisioned` (nothing reduces, something increases → needs more), or `RightSized` (equal). A CPU-only request whose CPU reduces stays `Waste` even if memory nominally increases from 0.

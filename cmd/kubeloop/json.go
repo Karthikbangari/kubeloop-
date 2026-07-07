@@ -1,6 +1,7 @@
 package main
 
 import (
+	rp "github.com/kubeloop/kubeloop/internal/reporting"
 	"github.com/kubeloop/kubeloop/internal/savings"
 	"github.com/kubeloop/kubeloop/internal/scan"
 )
@@ -12,6 +13,8 @@ type jsonReport struct {
 	EstimatedMonthlyWasteUSD float64        `json:"estimatedMonthlyWasteUsd"`
 	Realization              string         `json:"realization"`
 	Workloads                []jsonWorkload `json:"workloads"`
+	UnderProvisioned         []jsonWorkload `json:"underProvisioned"` // usage > request; needs more, not waste
+	RightSizedCount          int            `json:"rightSizedCount"`
 	Excluded                 []jsonExcluded `json:"excluded"`
 }
 
@@ -39,11 +42,21 @@ func toJSON(r scan.Report) jsonReport {
 	out := jsonReport{
 		EstimatedMonthlyWasteUSD: r.Total,
 		Realization:              savings.Realization(r.Mode),
-		Workloads:                make([]jsonWorkload, len(r.Rows)),
+		Workloads:                mapRows(r.Rows),
+		UnderProvisioned:         mapRows(r.Underprovisioned),
+		RightSizedCount:          r.RightSized,
 		Excluded:                 make([]jsonExcluded, len(r.Excluded)),
 	}
-	for i, row := range r.Rows {
-		out.Workloads[i] = jsonWorkload{
+	for i, e := range r.Excluded {
+		out.Excluded[i] = jsonExcluded{Namespace: e.Namespace, Name: e.Name, Reason: e.Reason}
+	}
+	return out
+}
+
+func mapRows(rows []rp.Row) []jsonWorkload {
+	out := make([]jsonWorkload, len(rows))
+	for i, row := range rows {
+		out[i] = jsonWorkload{
 			Namespace:             row.Namespace,
 			Name:                  row.Name,
 			Replicas:              row.Replicas,
@@ -55,9 +68,6 @@ func toJSON(r scan.Report) jsonReport {
 			Confidence:            row.Confidence,
 			Caution:               row.Caution,
 		}
-	}
-	for i, e := range r.Excluded {
-		out.Excluded[i] = jsonExcluded{Namespace: e.Namespace, Name: e.Name, Reason: e.Reason}
 	}
 	return out
 }

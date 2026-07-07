@@ -18,6 +18,7 @@ func TestClassify(t *testing.T) {
 		{"cpu reduces, mem increases -> still waste", rs.Resources{CPU: 2000, Mem: 100 * Mi}, rs.Resources{CPU: 576, Mem: 200 * Mi}, Waste},
 		{"both increase -> under-provisioned", rs.Resources{CPU: 500, Mem: 256 * Mi}, rs.Resources{CPU: 2880, Mem: 640 * Mi}, UnderProvisioned},
 		{"cpu increases only -> under-provisioned", rs.Resources{CPU: 500, Mem: 512 * Mi}, rs.Resources{CPU: 2880, Mem: 512 * Mi}, UnderProvisioned},
+		{"mem increases only -> under-provisioned", rs.Resources{CPU: 500, Mem: 512 * Mi}, rs.Resources{CPU: 500, Mem: 640 * Mi}, UnderProvisioned},
 		{"equal -> right-sized", rs.Resources{CPU: 500, Mem: 512 * Mi}, rs.Resources{CPU: 500, Mem: 512 * Mi}, RightSized},
 	}
 	for _, c := range cases {

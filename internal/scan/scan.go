@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/kubeloop/kubeloop/internal/classify"
 	"github.com/kubeloop/kubeloop/internal/labels"
 	rp "github.com/kubeloop/kubeloop/internal/reporting"
 	rs "github.com/kubeloop/kubeloop/internal/rightsizing"
@@ -30,10 +31,12 @@ type Excluded struct {
 // confidence/caution), the skipped ones, the headline total, and the billing
 // mode that decides when those dollars are realized.
 type Report struct {
-	Rows     []rp.Row
-	Excluded []Excluded
-	Total    float64
-	Mode     savings.Mode
+	Rows             []rp.Row // waste, ranked by $/month desc
+	Underprovisioned []rp.Row // usage exceeds request — needs more, not waste
+	RightSized       int      // count already at their proposal (nothing to do)
+	Excluded         []Excluded
+	Total            float64
+	Mode             savings.Mode
 }
 
 func key(ns, name string) string { return ns + "/" + name }
@@ -54,12 +57,25 @@ func Scan(inputs []Input, rec rs.Recommender, price rs.Price, mode savings.Mode)
 		metas[key(in.Namespace, in.Name)] = in.Meta
 	}
 	rows, total := rp.Rank(kept, rec, price)
+	var waste, under []rp.Row
+	rightSized := 0
 	for i := range rows {
 		c := sf.Score(metas[key(rows[i].Namespace, rows[i].Name)], rows[i].Usage)
 		rows[i].Confidence = c.Level
 		rows[i].Caution = c.Caution
+		// Keep under-provisioned/right-sized out of the waste ranking so the
+		// report never presents an "increase this" line as a saving. Their
+		// MonthlyWaste is already 0, so total (from Rank) stays the waste total.
+		switch classify.Classify(rows[i].Current, rows[i].Proposed) {
+		case classify.Waste:
+			waste = append(waste, rows[i])
+		case classify.UnderProvisioned:
+			under = append(under, rows[i])
+		default:
+			rightSized++
+		}
 	}
-	return Report{Rows: rows, Excluded: excluded, Total: total, Mode: mode}
+	return Report{Rows: waste, Underprovisioned: under, RightSized: rightSized, Excluded: excluded, Total: total, Mode: mode}
 }
 
 // Render delegates the ranked table (with CONF column + cautions) to reporting
@@ -69,6 +85,20 @@ func Render(r Report) string {
 	var b strings.Builder
 	b.WriteString(rp.Render(r.Rows, r.Total))
 	fmt.Fprintf(&b, "  -> %s\n", savings.Realization(r.Mode))
+	if len(r.Underprovisioned) > 0 {
+		items := make([]labels.Item, len(r.Underprovisioned))
+		for i, row := range r.Underprovisioned {
+			items[i] = labels.Item{Namespace: row.Namespace, Name: row.Name}
+		}
+		lbls := labels.Qualify(items)
+		b.WriteString("\nUnder-provisioned (usage exceeds request — needs more, not waste):\n")
+		for _, l := range lbls {
+			fmt.Fprintf(&b, "  - %s\n", l)
+		}
+	}
+	if r.RightSized > 0 {
+		fmt.Fprintf(&b, "\n%d workload(s) already right-sized.\n", r.RightSized)
+	}
 	if len(r.Excluded) > 0 {
 		items := make([]labels.Item, len(r.Excluded))
 		for i, e := range r.Excluded {
