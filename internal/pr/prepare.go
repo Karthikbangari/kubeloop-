@@ -27,6 +27,11 @@ func Prepare(r Request) (Prepared, error) {
 	if err != nil {
 		return Prepared{}, err
 	}
+	// A pod-level proposal can't be split across containers yet — refuse rather
+	// than emit a PR whose before/after doesn't match the patched result.
+	if err := RequireSingleContainer(src.Content); err != nil {
+		return Prepared{}, err
+	}
 	patched, err := Patch(src.Content, Target{
 		Kind: r.Ref.Kind, Name: r.Ref.Name, Namespace: r.Ref.Namespace, Container: r.Container,
 	}, quantityIfChanged(r.CurrentCPU, r.ProposedCPU), quantityIfChanged(r.CurrentMem, r.ProposedMem))

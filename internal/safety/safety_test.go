@@ -7,33 +7,49 @@ import (
 	rs "github.com/kubeloop/kubeloop/internal/rightsizing"
 )
 
+// stable is a healthy usage sample (real CPU + memory signal) so Assess tests
+// exercise the batch/history rules without tripping the missing-signal gate.
+var stable = rs.Usage{P95CPU: 410, P99CPU: 480, MaxMem: 512 * 1024 * 1024}
+
+func TestAssess_ExcludesNoCPUSignal(t *testing.T) {
+	e := Assess(Meta{Kind: "Deployment", HistoryDays: 30}, rs.Usage{MaxMem: 1 << 30})
+	if !e.Excluded || !strings.Contains(e.Reason, "CPU") {
+		t.Errorf("no CPU signal = %+v, want excluded citing CPU", e)
+	}
+}
+
+func TestAssess_ExcludesNoMemSignal(t *testing.T) {
+	e := Assess(Meta{Kind: "Deployment", HistoryDays: 30}, rs.Usage{P95CPU: 410, P99CPU: 480, MaxMem: 0})
+	if !e.Excluded || !strings.Contains(e.Reason, "memory") {
+		t.Errorf("no memory signal = %+v, want excluded citing memory", e)
+	}
+}
+
 func TestAssess_ExcludesBatch(t *testing.T) {
-	e := Assess(Meta{Kind: "CronJob", HistoryDays: 30})
+	e := Assess(Meta{Kind: "CronJob", HistoryDays: 30}, stable)
 	if !e.Excluded || !strings.Contains(e.Reason, "batch") {
 		t.Errorf("CronJob = %+v, want excluded with batch reason", e)
 	}
 }
 
 func TestAssess_ExcludesBatch_CaseInsensitive(t *testing.T) {
-	if e := Assess(Meta{Kind: "cronjob", HistoryDays: 30}); !e.Excluded {
+	if e := Assess(Meta{Kind: "cronjob", HistoryDays: 30}, stable); !e.Excluded {
 		t.Errorf("lowercase 'cronjob' = %+v, want excluded (casing must not skip the rule)", e)
 	}
 }
 
 func TestAssess_ExcludesShortHistory(t *testing.T) {
-	e := Assess(Meta{Kind: "Deployment", HistoryDays: 3})
+	e := Assess(Meta{Kind: "Deployment", HistoryDays: 3}, stable)
 	if !e.Excluded || !strings.Contains(e.Reason, "3d") {
 		t.Errorf("3d history = %+v, want excluded citing 3d", e)
 	}
 }
 
 func TestAssess_KeepsNormal(t *testing.T) {
-	if e := Assess(Meta{Kind: "Deployment", HistoryDays: 30}); e.Excluded {
+	if e := Assess(Meta{Kind: "Deployment", HistoryDays: 30}, stable); e.Excluded {
 		t.Errorf("normal Deployment = %+v, want kept", e)
 	}
 }
-
-var stable = rs.Usage{P95CPU: 410, P99CPU: 480} // P99/P95 = 1.17, not spiky
 
 func TestScore_HighForStableLongHistory(t *testing.T) {
 	c := Score(Meta{Kind: "Deployment", HistoryDays: 30}, stable)

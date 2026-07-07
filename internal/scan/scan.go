@@ -46,7 +46,7 @@ func Scan(inputs []Input, rec rs.Recommender, price rs.Price, mode savings.Mode)
 	metas := make(map[string]sf.Meta, len(inputs))
 	var excluded []Excluded
 	for _, in := range inputs {
-		if e := sf.Assess(in.Meta); e.Excluded {
+		if e := sf.Assess(in.Meta, in.Usage); e.Excluded {
 			excluded = append(excluded, Excluded{in.Namespace, in.Name, e.Reason})
 			continue
 		}

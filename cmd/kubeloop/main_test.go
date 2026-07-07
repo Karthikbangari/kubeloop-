@@ -11,8 +11,8 @@ import (
 
 // One rankable deployment (2000m→576m) + one CronJob that must be excluded.
 const sample = `[
- {"Namespace":"shop","Name":"checkout-api","Replicas":1,"Current":{"CPU":2000},"Usage":{"P95CPU":410,"P99CPU":480},"Meta":{"Kind":"Deployment","HistoryDays":30}},
- {"Namespace":"batch","Name":"nightly","Meta":{"Kind":"CronJob","HistoryDays":30}}
+ {"Namespace":"shop","Name":"checkout-api","Replicas":1,"Current":{"CPU":2000},"Usage":{"P95CPU":410,"P99CPU":480,"MaxMem":314572800},"Meta":{"Kind":"Deployment","HistoryDays":30}},
+ {"Namespace":"batch","Name":"nightly","Usage":{"P95CPU":100,"P99CPU":120,"MaxMem":104857600},"Meta":{"Kind":"CronJob","HistoryDays":30}}
 ]`
 
 func sampleFile(t *testing.T) string {
@@ -194,8 +194,8 @@ func TestRun_PRErrorsWhenWorkloadNameAmbiguous(t *testing.T) {
 	dir := t.TempDir()
 	in := filepath.Join(dir, "in.json")
 	body := `[
- {"Namespace":"team-a","Name":"api","Replicas":1,"Current":{"CPU":2000},"Usage":{"P95CPU":410,"P99CPU":480},"Meta":{"Kind":"Deployment","HistoryDays":30}},
- {"Namespace":"team-b","Name":"api","Replicas":1,"Current":{"CPU":2000},"Usage":{"P95CPU":410,"P99CPU":480},"Meta":{"Kind":"Deployment","HistoryDays":30}}
+ {"Namespace":"team-a","Name":"api","Replicas":1,"Current":{"CPU":2000,"Mem":536870912},"Usage":{"P95CPU":410,"P99CPU":480,"MaxMem":314572800},"Meta":{"Kind":"Deployment","HistoryDays":30}},
+ {"Namespace":"team-b","Name":"api","Replicas":1,"Current":{"CPU":2000,"Mem":536870912},"Usage":{"P95CPU":410,"P99CPU":480,"MaxMem":314572800},"Meta":{"Kind":"Deployment","HistoryDays":30}}
 ]`
 	if err := os.WriteFile(in, []byte(body), 0o600); err != nil {
 		t.Fatal(err)
@@ -221,7 +221,7 @@ func TestRun_PRErrorsWhenNoReductions(t *testing.T) {
 	dir := t.TempDir()
 	in := filepath.Join(dir, "in.json")
 	body := `[
- {"Namespace":"shop","Name":"tiny","Replicas":1,"Current":{"CPU":500},"Usage":{"P95CPU":410,"P99CPU":480},"Meta":{"Kind":"Deployment","HistoryDays":30}}
+ {"Namespace":"shop","Name":"tiny","Replicas":1,"Current":{"CPU":500,"Mem":134217728},"Usage":{"P95CPU":410,"P99CPU":480,"MaxMem":314572800},"Meta":{"Kind":"Deployment","HistoryDays":30}}
 ]`
 	if err := os.WriteFile(in, []byte(body), 0o600); err != nil {
 		t.Fatal(err)
@@ -242,5 +242,45 @@ func TestRun_PRErrorsWhenNoReductions(t *testing.T) {
 	}, &bytes.Buffer{})
 	if err == nil || !strings.Contains(err.Error(), "no request reductions") {
 		t.Fatalf("want no-reductions error, got %v", err)
+	}
+}
+
+// The pr.Prepare multi-container guard must surface all the way to the CLI, so
+// a sidecar pod can't get a misleading pod-level PR.
+func TestRun_PRRefusesMultiContainer(t *testing.T) {
+	dir := t.TempDir()
+	manifest := filepath.Join(dir, "deploy.yaml")
+	multi := `apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: checkout-api
+  namespace: shop
+spec:
+  template:
+    spec:
+      containers:
+        - name: app
+          resources:
+            requests:
+              cpu: 2000m
+        - name: sidecar
+          resources:
+            requests:
+              cpu: 500m
+`
+	if err := os.WriteFile(manifest, []byte(multi), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	err := Run([]string{
+		"pr",
+		"--from-file", sampleFile(t),
+		"--manifest", manifest,
+		"--namespace", "shop",
+		"--workload", "checkout-api",
+		"--container", "app",
+		"--out", filepath.Join(dir, "patched.yaml"),
+	}, &bytes.Buffer{})
+	if err == nil || !strings.Contains(err.Error(), "containers") {
+		t.Fatalf("want multi-container refusal, got %v", err)
 	}
 }

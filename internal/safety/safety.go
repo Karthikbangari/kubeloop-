@@ -35,11 +35,17 @@ type Exclusion struct {
 	Reason   string
 }
 
-// Assess returns whether to exclude a workload. Batch workloads are bursty by
-// design and short-history workloads lack signal — both would produce
-// confident-looking nonsense, so we skip them and say why.
-func Assess(m Meta) Exclusion {
+// Assess returns whether to exclude a workload. Missing usage signal comes
+// first: with no CPU data the proposal collapses to 0m, and with no memory data
+// it collapses to the bare buffer floor — both confident, both dangerous, so we
+// refuse to size rather than guess. Then batch workloads (bursty by design) and
+// short-history workloads (too little signal) are excluded with their reason.
+func Assess(m Meta, u rs.Usage) Exclusion {
 	switch {
+	case u.P95CPU == 0 && u.P99CPU == 0:
+		return Exclusion{true, "no measured CPU usage — can't size (metrics gap or not running)"}
+	case u.MaxMem == 0:
+		return Exclusion{true, "no measured memory usage — can't size (metrics gap or not running)"}
 	case strings.EqualFold(m.Kind, "CronJob") || strings.EqualFold(m.Kind, "Job"):
 		return Exclusion{true, "batch workload (" + m.Kind + ") — bursty by design, request-sizing doesn't apply"}
 	case m.HistoryDays < minHistoryDays:

@@ -85,3 +85,29 @@ spec:
 		t.Error("want error when resources.requests absent")
 	}
 }
+
+// Regression: a StatefulSet with flow-style requests must patch correctly and
+// keep the inline `{cpu: ..., memory: ...}` style.
+func TestPatch_StatefulSetFlowStyleRequests(t *testing.T) {
+	ss := `apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: pg
+  namespace: data
+spec:
+  template:
+    spec:
+      containers:
+        - name: db
+          resources:
+            requests: {cpu: 2000m, memory: 1Gi}
+`
+	out, err := Patch([]byte(ss), Target{Kind: "StatefulSet", Name: "pg", Namespace: "data", Container: "db"}, "576m", "528Mi")
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := string(out)
+	if !strings.Contains(s, "requests: {cpu: 576m, memory: 528Mi}") {
+		t.Errorf("expected flow-style patched requests, got:\n%s", s)
+	}
+}

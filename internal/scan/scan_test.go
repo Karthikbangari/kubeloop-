@@ -18,11 +18,14 @@ func approx(a, b float64) bool { return a-b < 0.01 && b-a < 0.01 }
 //   checkout-api:    freed 1424 ×$0.0001×1×730 = $103.95
 func fixtures() []Input {
 	dep := func(days int) sf.Meta { return sf.Meta{Kind: "Deployment", HistoryDays: days} }
+	// All workloads carry real CPU + memory signal, so the batch/short-history
+	// ones are excluded for their type — not for a (spurious) missing signal.
+	// Price is CPU-only, so memory doesn't affect the hand-checked dollar totals.
 	return []Input{
-		{Workload: rp.Workload{Namespace: "shop", Name: "checkout-api", Replicas: 1, Current: rs.Resources{CPU: 2000}, Usage: rs.Usage{P95CPU: 410, P99CPU: 480}}, Meta: dep(30)},
-		{Workload: rp.Workload{Namespace: "shop", Name: "recommendations", Replicas: 2, Current: rs.Resources{CPU: 4000}, Usage: rs.Usage{P95CPU: 800, P99CPU: 900}}, Meta: dep(30)},
-		{Workload: rp.Workload{Namespace: "batch", Name: "nightly"}, Meta: sf.Meta{Kind: "CronJob", HistoryDays: 30}},
-		{Workload: rp.Workload{Namespace: "shop", Name: "new-svc"}, Meta: dep(3)},
+		{Workload: rp.Workload{Namespace: "shop", Name: "checkout-api", Replicas: 1, Current: rs.Resources{CPU: 2000}, Usage: rs.Usage{P95CPU: 410, P99CPU: 480, MaxMem: 300 << 20}}, Meta: dep(30)},
+		{Workload: rp.Workload{Namespace: "shop", Name: "recommendations", Replicas: 2, Current: rs.Resources{CPU: 4000}, Usage: rs.Usage{P95CPU: 800, P99CPU: 900, MaxMem: 300 << 20}}, Meta: dep(30)},
+		{Workload: rp.Workload{Namespace: "batch", Name: "nightly", Usage: rs.Usage{P95CPU: 100, P99CPU: 120, MaxMem: 100 << 20}}, Meta: sf.Meta{Kind: "CronJob", HistoryDays: 30}},
+		{Workload: rp.Workload{Namespace: "shop", Name: "new-svc", Usage: rs.Usage{P95CPU: 100, P99CPU: 120, MaxMem: 100 << 20}}, Meta: dep(3)},
 	}
 }
 

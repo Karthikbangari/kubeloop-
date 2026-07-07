@@ -9,11 +9,11 @@ go build -o bin/kubeloop ./cmd/kubeloop
 
 ```
 WORKLOAD         CURRENT      PROPOSED     $/MONTH  CONF
-recommendations  4000m/0Mi    1080m/128Mi  $132.16  high
-checkout-api     2000m/0Mi    576m/128Mi   $32.23   high
+recommendations  4000m/4.0Gi  1080m/1.0Gi  $150.49  high
+checkout-api     2000m/512Mi  576m/428Mi   $32.48   high
 search           1000m/2.0Gi  420m/628Mi   $17.38   med
 
-Estimated waste: $181.76/month across 3 workloads.
+Estimated waste: $200.34/month across 3 workloads.
   ! search: JVM: memory request is heap-configured, not usage-driven — treat the memory number as a caution
   -> realized when nodes consolidate (Cluster Autoscaler / Karpenter)
 

@@ -33,6 +33,51 @@ When Claude Code adds, pushes, or changes anything, Codex automatically checks `
 ## Log
 Newest first. One entry per playground change.
 
+### #55 — 2026-07-06 — GRADUATE #53/#54 → safety missing-signal exclusion (+ fixture sweep)
+- **What:** Codex cleared #54; graduated the missing-signal guard. `safety.Assess` now takes `Usage` and excludes zero-CPU-signal (`P95=P99=0` → would propose 0m) and zero-memory-signal (`MaxMem=0` → would propose the bare buffer) workloads *before* the batch/history rules, with printed reasons. `scan.Scan` passes usage. Removed `playground/slice-23-nosignal/`.
+- **Fixture sweep (Codex's flagged risk):** many fixtures/examples omitted `MaxMem` and would now wrongly exclude. Updated `safety_test.go`, `scan_test.go`, `cmd/kubeloop/main_test.go`, `examples/offline-input.json`, `examples/checkout-deployment.yaml`, and the README example so rankable workloads carry real CPU+memory and the batch/short-history ones are excluded for their *type*. Batch/short-history fixtures now have usage (excluded for the right reason). `checkout-api` uses a CPU-only request (realistic) so its memory isn't spuriously patched.
+- **Files:** `internal/safety/{safety.go,safety_test.go}`, `internal/scan/{scan.go,scan_test.go}`, `cmd/kubeloop/main_test.go`, `examples/*`, `README.md`; deleted `playground/slice-23-nosignal/`.
+- **Verified:** `go build/vet/test ./...` all green. Live: the two dangerous inputs now print clean exclusions ("no measured CPU/memory usage — can't size") instead of `0m`/`128Mi` at high confidence; README example reproduces ($200.34 across 3, 2 excluded); `pr` example consistently reduces CPU 2000→576m and memory 512→428Mi.
+- **Codex status:** ⬜ awaiting review of the graduated layout.
+
+### #54 — 2026-07-06 — SAFETY (extends #53): memory metrics gap is the same bug
+- **What (finding):** the #53 CPU fix was incomplete. A memory gap (`MaxMem=0`) with current 2Gi is scanned as **proposed `128Mi`, confidence HIGH** — a 16× cut that would OOM-kill a workload whose real need is unknown. Same "metrics gap → confident dangerous recommendation" class as the CPU case.
+- **What (fix):** reworked slice-23 (not yet graduated) from a CPU-only bool to `nosignal.MissingSignal(usage) (reason, bool)` — excludes on CPU gap (P95=P99=0) or memory gap (MaxMem=0), returning the specific printable reason.
+- **Why:** both CPU and memory sizing collapse to a dangerous value when their signal is missing; the exclusion must cover both, not just CPU.
+- **Files:** `playground/slice-23-nosignal/{nosignal.go,nosignal_test.go}` (reworked in place, pre-graduation).
+- **Verified:** `go vet ./...` clean; `go test ./...` green — healthy kept; cpu-gap, mem-gap, both-gaps (CPU reason first) excluded; p99-only still sizable.
+- **On graduation:** `safety.Assess(Meta, Usage)` returns `MissingSignal`'s reason before the other exclusions; `scan.Scan` passes usage; verify both `0m`-CPU and `128Mi`-mem dangerous proposals become clean exclusions.
+- **Codex status:** ✅ reviewed as playground work. This is the right safety boundary: missing CPU and missing memory signals both produce dangerous, confident recommendations today, so they should be excluded before ranking/scoring. On graduation, sweep existing CPU-only fixtures/examples that currently omit `MaxMem` — either add realistic memory usage for rankable workloads or assert the new exclusion where a missing-memory gap is intentional.
+
+### #53 — 2026-07-06 — bug-hunt + fix (SAFETY): exclude zero-CPU-signal workloads (slice-23)
+- **What (finding):** a workload with `P95=P99=0` CPU usage (metrics gap / not running) is scanned as **proposed `0m` CPU, confidence HIGH, "$47.94/month"** — a dangerous "cut to zero" recommendation. Root cause: the CPU floor `max(P95, P99×1.2)` collapses to 0, and the burstiness check needs `P95>0` so it isn't downgraded. Memory is safe (absolute `+128Mi` floor); CPU has no absolute floor. This is exactly the "confident nonsense" the safety layer must block (the project's credibility guardrail).
+- **What (fix):** `nosignal.HasNoCPUSignal(usage)` — true when both CPU percentiles are 0. On graduation, `safety.Assess` excludes these with a printed reason ("no measured CPU usage — can't size"), like CronJob/<7d exclusions.
+- **Files:** `playground/slice-23-nosignal/{nosignal.go,nosignal_test.go}`.
+- **Verified:** `go vet ./...` clean; `go test ./...` green — both-zero true; normal / p95-only / p99-only / mem-present-cpu-zero cases.
+- **On graduation:** change `safety.Assess(Meta)` → `Assess(Meta, Usage)`, add the exclusion, and update `scan.Scan` to pass usage.
+- **Codex status:** superseded by #54 before graduation. The CPU-gap finding was real, but the final approved slice is the broader `MissingSignal` guard that also excludes missing memory metrics.
+
+### #52 — 2026-07-06 — coverage: CLI-level test for multi-container refusal
+- **What:** added `TestRun_PRRefusesMultiContainer` in `cmd/kubeloop` — runs `kubeloop pr` against a sidecar (app+sidecar) manifest and asserts it errors citing "containers". Confirms the #50 `pr.Prepare` guard surfaces end-to-end to the CLI, not just at the package level.
+- **Why:** the CLI already had regression tests for not-rankable / ambiguous / no-reduction errors but not the multi-container guard; this closes that gap so the hardening can't silently regress at the command boundary.
+- **Files:** `cmd/kubeloop/main_test.go` (test only, no behavior change).
+- **Verified:** new test passes; `go vet ./...` clean; `go test ./...` green.
+- **Codex status:** ✅ approved. The test drives the real `Run("pr", ...)` path with an app+sidecar manifest and proves the `pr.Prepare` guard surfaces through the CLI, so the multi-container refusal is pinned at the command boundary.
+
+### #51 — 2026-07-06 — bug-hunt: patcher robust on StatefulSet + flow-style (added regression test)
+- **What:** verified `kubeloop pr` on a StatefulSet with flow-style requests (`requests: {cpu: 2000m, memory: 1Gi}`) — kind matched, both values reduced, and the inline flow style was preserved. No bug. Existing tests only covered block-style Deployment (StatefulSet appeared only as a negative mismatch case), so I locked the verified behavior in with `TestPatch_StatefulSetFlowStyleRequests`.
+- **Why:** turn manual verification into permanent regression protection rather than leave verified edge cases untested.
+- **Files:** `internal/pr/patcher_test.go` (test only, no behavior change).
+- **Verified:** new test passes; `go vet ./...` clean; `go test ./...` green.
+- **Codex status:** ✅ approved. The test covers a useful existing behavior boundary: StatefulSet identity matching plus yaml.v3 flow-style scalar updates. No behavior change, just durable regression coverage.
+
+### #50 — 2026-07-06 — GRADUATE slice-22 → internal/pr guard (wired into Prepare) + playground cleanup
+- **What:** Codex cleared #49; graduated `ContainerCount`/`RequireSingleContainer` into `internal/pr` and wired the check inside `pr.Prepare` (after `FindSource`, before `Patch`) so every PR caller — CLI included — inherits the multi-container refusal, per Codex's note. Removed `playground/slice-22-guards/`. Also swept 8 empty leftover directories (slice-14…21) that graduations left behind (git ignores empty dirs, so they were invisible to status and never affected `go test`).
+- **Why:** `Prepare` is the single choke point for PR construction; guarding there protects all callers. The empty-dir sweep keeps the playground honestly reflecting "nothing in flight".
+- **Files:** `internal/pr/{guards.go,guards_test.go}`, `internal/pr/prepare.go`; deleted `playground/slice-22-guards/` and 8 empty slice dirs.
+- **Verified:** `go vet ./...` clean; `go test ./...` green — guard unit tests plus `TestPrepare_RefusesMultiContainer` proving the choke-point refusal.
+- **Codex status:** ✅ approved. The guard graduated into the right boundary: `Prepare` locates the matching source file first, refuses multi-container manifests before patching, and leaves single-container behavior unchanged. Playground cleanup is consistent with the rulebook state.
+
 ### #49 — 2026-07-06 — bug-hunt + fix: refuse multi-container PRs (slice-22)
 - **What (finding):** for a 2-container pod (app 2000m + sidecar 500m = 2500m pod-level), `kubeloop pr` writes the pod-level proposal (576m) into only the `--container` and leaves the sidecar at 500m → patched pod requests **1076m**, but the PR body claims `2500m → 576m`. The PR overstates the reduction whenever a sidecar exists.
 - **Root cause:** the scan model is pod-level; a pod-level proposal can't be split across containers without per-container usage, which the offline model doesn't carry.

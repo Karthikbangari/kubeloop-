@@ -1,9 +1,4 @@
-// Package guards refuses PRs the pod-level scan model can't produce honestly.
-// The scan proposal is for the whole pod; applying it to one container of a
-// multi-container pod (e.g. app + sidecar) leaves the siblings untouched, so
-// the patched pod request no longer matches the PR's stated before/after.
-// Until per-container proposals exist, refuse rather than emit a misleading PR.
-package guards
+package pr
 
 import (
 	"fmt"
@@ -11,7 +6,8 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-type podManifest struct {
+// containerList reads just the container names from a workload manifest.
+type containerList struct {
 	Spec struct {
 		Template struct {
 			Spec struct {
@@ -25,15 +21,18 @@ type podManifest struct {
 
 // ContainerCount returns how many containers the workload manifest declares.
 func ContainerCount(doc []byte) (int, error) {
-	var m podManifest
-	if err := yaml.Unmarshal(doc, &m); err != nil {
+	var c containerList
+	if err := yaml.Unmarshal(doc, &c); err != nil {
 		return 0, fmt.Errorf("parse manifest: %w", err)
 	}
-	return len(m.Spec.Template.Spec.Containers), nil
+	return len(c.Spec.Template.Spec.Containers), nil
 }
 
-// RequireSingleContainer errors when the pod has more than one container, since
-// a pod-level proposal can't be split across containers yet.
+// RequireSingleContainer errors when the pod has more than one container. The
+// scan proposal is pod-level; applying it to one container of a multi-container
+// pod (e.g. app + sidecar) leaves the siblings untouched, so the patched pod
+// request no longer matches the PR's stated before/after. Until per-container
+// proposals exist, refuse rather than emit a misleading PR.
 func RequireSingleContainer(doc []byte) error {
 	n, err := ContainerCount(doc)
 	if err != nil {

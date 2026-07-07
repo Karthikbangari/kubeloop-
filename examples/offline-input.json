@@ -3,67 +3,38 @@
     "Namespace": "shop",
     "Name": "checkout-api",
     "Replicas": 1,
-    "Current": {
-      "CPU": 2000
-    },
-    "Usage": {
-      "P95CPU": 410,
-      "P99CPU": 480
-    },
-    "Meta": {
-      "Kind": "Deployment",
-      "HistoryDays": 30
-    }
+    "Current": { "CPU": 2000, "Mem": 536870912 },
+    "Usage": { "P95CPU": 410, "P99CPU": 480, "MaxMem": 314572800 },
+    "Meta": { "Kind": "Deployment", "HistoryDays": 30 }
   },
   {
     "Namespace": "shop",
     "Name": "recommendations",
     "Replicas": 2,
-    "Current": {
-      "CPU": 4000
-    },
-    "Usage": {
-      "P95CPU": 800,
-      "P99CPU": 900
-    },
-    "Meta": {
-      "Kind": "Deployment",
-      "HistoryDays": 30
-    }
+    "Current": { "CPU": 4000, "Mem": 4294967296 },
+    "Usage": { "P95CPU": 800, "P99CPU": 900, "MaxMem": 943718400 },
+    "Meta": { "Kind": "Deployment", "HistoryDays": 30 }
   },
   {
     "Namespace": "shop",
     "Name": "search",
     "Replicas": 1,
-    "Current": {
-      "CPU": 1000,
-      "Mem": 2147483648
-    },
-    "Usage": {
-      "P95CPU": 300,
-      "P99CPU": 350,
-      "MaxMem": 524288000
-    },
-    "Meta": {
-      "Kind": "Deployment",
-      "HistoryDays": 30,
-      "Runtime": "jvm"
-    }
+    "Current": { "CPU": 1000, "Mem": 2147483648 },
+    "Usage": { "P95CPU": 300, "P99CPU": 350, "MaxMem": 524288000 },
+    "Meta": { "Kind": "Deployment", "HistoryDays": 30, "Runtime": "jvm" }
   },
   {
     "Namespace": "batch",
     "Name": "nightly",
-    "Meta": {
-      "Kind": "CronJob",
-      "HistoryDays": 30
-    }
+    "Current": { "CPU": 1000, "Mem": 268435456 },
+    "Usage": { "P95CPU": 200, "P99CPU": 250, "MaxMem": 104857600 },
+    "Meta": { "Kind": "CronJob", "HistoryDays": 30 }
   },
   {
     "Namespace": "shop",
     "Name": "new-svc",
-    "Meta": {
-      "Kind": "Deployment",
-      "HistoryDays": 3
-    }
+    "Current": { "CPU": 1000, "Mem": 268435456 },
+    "Usage": { "P95CPU": 200, "P99CPU": 250, "MaxMem": 104857600 },
+    "Meta": { "Kind": "Deployment", "HistoryDays": 3 }
   }
 ]
