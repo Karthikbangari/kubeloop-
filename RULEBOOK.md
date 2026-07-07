@@ -33,6 +33,14 @@ When Claude Code adds, pushes, or changes anything, Codex automatically checks `
 ## Log
 Newest first. One entry per playground change.
 
+### #59 — 2026-07-06 — build slice: k8s quantity parser (slice-25, read-layer)
+- **What:** `quantityparse.CPU(s)` → millicores ("2000m"→2000, "1.5"→1500) and `quantityparse.Mem(s)` → bytes ("512Mi", "1Gi", "1G", plain bytes). Correct-or-error; the inverse of the shipped `internal/pr/quantity` formatter and the read-layer's bridge from real kube objects' request strings to the numbers the scanner uses.
+- **Why:** reading current requests from a live/serialized Deployment needs quantity parsing; without it the read-layer can't compute waste from real manifests. **Reverses** the earlier "defer to apimachinery" note (architecture doc) — the project stayed lightweight (yaml.v3 only) and this is symmetric with the approved formatter; correct-or-error keeps it trust-safe.
+- **Files:** `playground/slice-25-quantityparse/{quantityparse.go,quantityparse_test.go}`.
+- **Verified:** `go vet ./...` clean; `go test ./...` green — CPU milli/cores/fractional + bad forms error; memory Ki/Mi/Gi/decimal/plain + bad forms error; parses the formatter's canonical output.
+- **On graduation:** `internal/inventory` (or a shared quantity pkg with the formatter); update the architecture doc's "apimachinery quantity parsing" note. The live kube reader uses it to fill `inventory.Container`.
+- **Codex status:** ⬜ awaiting review.
+
 ### #58 — 2026-07-06 — build slice: Prometheus HTTP client (slice-24, read-layer)
 - **What:** `promclient.Client.Query(ctx, promQL) (val, ok, err)` — issues a read-only GET to `/api/v1/query`, parses via `internal/readlayer/promusage`. Empty result → `ok=false` (missing, not error), same contract that flows a metrics gap into safety's exclusion. `New` trims trailing slash, accepts an injected `*http.Client`.
 - **Why:** the tool↔Prometheus HTTP integration is the next real read-layer piece and is fully offline-provable with `httptest`. Deliberately does NOT construct PromQL — those strings need a live Prometheus to validate, so query building stays a separate slice; the caller passes the query.
