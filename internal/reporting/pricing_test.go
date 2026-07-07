@@ -80,3 +80,10 @@ func TestLoadPrice_RejectsUnknownField(t *testing.T) {
 		t.Fatalf("want unknown-field error, got %v", err)
 	}
 }
+
+func TestLoadPrice_RejectsTrailingJSON(t *testing.T) {
+	p := priceFile(t, `{"clouds":{"aws":{"perVCPUHour":0.05}}}{}`)
+	if _, err := LoadPrice("aws", p); err == nil || !strings.Contains(err.Error(), "trailing JSON") {
+		t.Fatalf("want trailing JSON error, got %v", err)
+	}
+}

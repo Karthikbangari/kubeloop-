@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 
 	rs "github.com/kubeloop/kubeloop/internal/rightsizing"
@@ -77,6 +78,10 @@ func LoadPrice(cloud, file string) (rs.Price, error) {
 	var f PriceFile
 	if err := dec.Decode(&f); err != nil {
 		return rs.Price{}, fmt.Errorf("parse %s: %w", file, err)
+	}
+	var extra any
+	if err := dec.Decode(&extra); err != io.EOF {
+		return rs.Price{}, fmt.Errorf("parse %s: trailing JSON data", file)
 	}
 	r, ok := f.Clouds[cloud]
 	if !ok {
