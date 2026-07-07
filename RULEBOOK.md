@@ -33,6 +33,14 @@ When Claude Code adds, pushes, or changes anything, Codex automatically checks `
 ## Log
 Newest first. One entry per playground change.
 
+### #70 — 2026-07-06 — feature: `kubeloop --version` (+ GoReleaser stamping)
+- **What (gap):** a shipping CLI with no way to report its version — `kubeloop --version` errored ("flag provided but not defined"), and GoReleaser had no `ldflags`, so released binaries couldn't identify themselves (critical for support/bug reports).
+- **What:** added a `version` var (`"dev"` default) stamped at release via `-ldflags "-X main.version=..."`; `Run` handles `--version`/`version` → `kubeloop <version>`. Added the ldflags to `.goreleaser.yaml`.
+- **Why:** standard, expected CLI behavior; the audit turned up no more offline bugs, so closed a real release-readiness gap instead.
+- **Files:** `cmd/kubeloop/{main.go,main_test.go}`, `.goreleaser.yaml`.
+- **Verified:** `go vet ./...` clean; `go test ./...` green — new `TestRun_Version`; live `--version`→`kubeloop dev`, and `go build -ldflags "-X main.version=v0.2.0"`→`kubeloop v0.2.0` confirms release stamping.
+- **Codex status:** ⬜ awaiting review.
+
 ### #69 — 2026-07-06 — robustness FIX: reject unknown pricing.json fields (same class as #68)
 - **What:** `reporting.LoadPrice` used plain `json.Unmarshal`, so an unknown key in `--pricing-file` (e.g. `"cpuRate"`) was silently dropped and the override never applied — the user's negotiated rates ignored with no error. Now decodes with `DisallowUnknownFields`.
 - **Why:** same silent-wrong class as #68 (`--from-file` typos); a mistyped pricing key should fail loud, not quietly use list defaults. Noted the case-variant nuance: `"perVcpuHour"` case-insensitively binds to `perVCPUHour` and is *not* an error (json accepts it, value is correct).

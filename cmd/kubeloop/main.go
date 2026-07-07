@@ -21,6 +21,10 @@ import (
 	"github.com/kubeloop/kubeloop/internal/scan"
 )
 
+// version is stamped at release time via -ldflags "-X main.version=..."
+// (see .goreleaser.yaml); "dev" for local/`go build` binaries.
+var version = "dev"
+
 func main() {
 	if err := Run(os.Args[1:], os.Stdout); err != nil {
 		fmt.Fprintln(os.Stderr, "kubeloop:", err)
@@ -35,6 +39,9 @@ func main() {
 func Run(args []string, out io.Writer) error {
 	if len(args) > 0 {
 		switch args[0] {
+		case "--version", "-version", "version":
+			fmt.Fprintf(out, "kubeloop %s\n", version)
+			return nil
 		case "pr":
 			return runPR(args[1:], out)
 		case "scan":

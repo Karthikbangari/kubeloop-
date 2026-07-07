@@ -335,3 +335,15 @@ spec:
 		t.Fatalf("want multi-container refusal, got %v", err)
 	}
 }
+
+func TestRun_Version(t *testing.T) {
+	for _, arg := range []string{"--version", "version"} {
+		var out bytes.Buffer
+		if err := Run([]string{arg}, &out); err != nil {
+			t.Fatalf("Run(%q) errored: %v", arg, err)
+		}
+		if !strings.Contains(out.String(), "kubeloop") {
+			t.Errorf("Run(%q) = %q, want it to name kubeloop + version", arg, out.String())
+		}
+	}
+}
