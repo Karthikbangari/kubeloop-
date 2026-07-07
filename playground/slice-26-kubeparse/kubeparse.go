@@ -64,6 +64,9 @@ func Parse(doc []byte) (Workload, error) {
 	replicas := 1
 	if o.Spec.Replicas != nil {
 		replicas = *o.Spec.Replicas
+		if replicas < 0 {
+			return Workload{}, fmt.Errorf("negative replicas %d", replicas)
+		}
 	}
 	reg, err := toContainers(o.Spec.Template.Spec.Containers)
 	if err != nil {

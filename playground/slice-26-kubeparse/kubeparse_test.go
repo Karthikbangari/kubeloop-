@@ -60,6 +60,13 @@ func TestParse_ReplicasDefaultsToOne(t *testing.T) {
 	}
 }
 
+func TestParse_NegativeReplicasErrors(t *testing.T) {
+	bad := `{"kind":"Deployment","metadata":{"name":"x"},"spec":{"replicas":-1,"template":{"spec":{"containers":[{"name":"app"}]}}}}`
+	if _, err := Parse([]byte(bad)); err == nil {
+		t.Error("want error on negative replicas")
+	}
+}
+
 func TestParse_MalformedQuantityErrors(t *testing.T) {
 	bad := `{"kind":"Deployment","metadata":{"name":"x"},"spec":{"template":{"spec":{"containers":[{"name":"app","resources":{"requests":{"cpu":"lots","memory":"1Gi"}}}]}}}}`
 	if _, err := Parse([]byte(bad)); err == nil {
