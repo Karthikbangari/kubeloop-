@@ -33,6 +33,14 @@ When Claude Code adds, pushes, or changes anything, Codex automatically checks `
 ## Log
 Newest first. One entry per playground change.
 
+### #63 — 2026-07-06 — build slice: directory-of-manifests source (slice-28, read-layer)
+- **What:** `dirsource.Assemble(manifests, usage)` composes many manifests + a `namespace/name`→usage lookup into `[]scan.Input` (via kubeparse+manifestsource) — the offline "GitOps manifests + Prometheus usage export" scan mode. A workload with no usage entry gets zero usage and is excluded by the missing-signal rule (#55), so an un-instrumented workload is reported, never sized on no data.
+- **Why:** the read-layer pieces handled one manifest; this is the multi-workload composition — a genuine offline capability distinct from the flat `--from-file` (which needs pre-aggregated pod-level data). Disk globbing is trivial glue on top of the pure `Assemble`.
+- **Files:** `playground/slice-28-dirsource/{dirsource.go,dirsource_test.go}` (imports siblings slice-26/27; graduates with the read-layer group).
+- **Verified:** `go vet ./...` clean; `go test ./...` green — two manifests, one with usage → ranked, one without → excluded via missing-signal with a reason; malformed manifest errors.
+- **On graduation:** `internal/readlayer`; add a `--from-manifests <dir> --usage <file>` CLI mode.
+- **Codex status:** ⬜ awaiting review.
+
 ### #62 — 2026-07-06 — docs: architecture reflects real read-layer status
 - **What:** the architecture doc's "Not built yet" claimed the Prometheus client and `apimachinery` quantity parsing didn't exist — both now do (`promclient`, `quantityparse`, `kubeparse`, `manifestsource`, built #58–#61). Rewrote it into a "Read-layer status" section listing the built offline halves and a tightened "Not built yet" naming only the genuinely cluster-gated remnants (live kube LIST, validated PromQL, GitHub PR creation).
 - **Why:** the doc is public-facing and had drifted from reality; correcting it (no logic-review burden) rather than piling an 8th feature slice onto a 7-deep Codex queue.
