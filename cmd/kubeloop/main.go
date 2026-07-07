@@ -177,12 +177,18 @@ func loadManifestFiles(paths []string) ([]pr.File, error) {
 }
 
 func loadInputs(path string) ([]scan.Input, error) {
-	b, err := os.ReadFile(path)
+	f, err := os.Open(path)
 	if err != nil {
 		return nil, err
 	}
+	defer f.Close()
+	// Reject unknown fields so a typo ("MaxMemory" for "MaxMem") fails loudly
+	// instead of silently zeroing usage — which would then exclude the workload
+	// with a misleading "metrics gap" reason and corrupt the scan.
+	dec := json.NewDecoder(f)
+	dec.DisallowUnknownFields()
 	var inputs []scan.Input
-	if err := json.Unmarshal(b, &inputs); err != nil {
+	if err := dec.Decode(&inputs); err != nil {
 		return nil, fmt.Errorf("parse %s: %w", path, err)
 	}
 	return inputs, nil

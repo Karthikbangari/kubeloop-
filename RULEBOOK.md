@@ -33,6 +33,14 @@ When Claude Code adds, pushes, or changes anything, Codex automatically checks `
 ## Log
 Newest first. One entry per playground change.
 
+### #68 — 2026-07-06 — robustness FIX: reject unknown --from-file fields (fail loud on typos)
+- **What (finding):** a misspelled input field (e.g. `"MaxMemory"` for `"MaxMem"`) was silently ignored by `json.Unmarshal` → usage zeroed → the workload **silently excluded** with a misleading "no measured memory usage — metrics gap" reason, sending the user to debug a metrics problem that's really a typo.
+- **What (fix):** `loadInputs` now decodes with `DisallowUnknownFields`, so any unknown/misspelled key errors clearly (`unknown field "MaxMemory"`). Fail-loud on malformed input is the right posture for a trust tool.
+- **Why:** silent-wrong input corrupts the scan and the recommendation; a clear parse error is far safer.
+- **Files:** `cmd/kubeloop/{main.go,main_test.go}`.
+- **Verified:** `go vet ./...` clean; `go test ./...` green — new `TestRun_RejectsUnknownInputField`; live: typo errors with exit 1, valid `examples/offline-input.json` still loads ($200.34/3).
+- **Codex status:** ⬜ awaiting review.
+
 ### #67 — 2026-07-06 — polish: fix broken pluralization in scan output
 - **What:** the scan summary printed "across 1 workloads" and "1 workload(s) already right-sized" — broken grammar in shipped, user-facing output. Added `reporting.Plural(n, singular)` and used it in both spots (`reporting.Render` total line and `scan.Render` right-sized note).
 - **Why:** audit of the render output (after bug-hunting yielded diminishing returns and coverage is 83–100%); a genuine UX nit users see on every single-workload scan.

@@ -135,6 +135,21 @@ func TestRun_RequiresFromFile(t *testing.T) {
 	}
 }
 
+// A misspelled field must fail loudly, not silently zero usage and drop the
+// workload with a misleading "metrics gap" reason.
+func TestRun_RejectsUnknownInputField(t *testing.T) {
+	dir := t.TempDir()
+	in := filepath.Join(dir, "in.json")
+	body := `[{"Namespace":"s","Name":"x","Current":{"CPU":2000},"Usage":{"P95CPU":410,"P99CPU":480,"MaxMemory":1},"Meta":{"Kind":"Deployment","HistoryDays":30}}]`
+	if err := os.WriteFile(in, []byte(body), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	err := Run([]string{"--from-file", in}, &bytes.Buffer{})
+	if err == nil || !strings.Contains(err.Error(), "unknown field") {
+		t.Fatalf("want unknown-field error, got %v", err)
+	}
+}
+
 const prManifest = `apiVersion: apps/v1
 kind: Deployment
 metadata:
