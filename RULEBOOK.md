@@ -33,6 +33,14 @@ When Claude Code adds, pushes, or changes anything, Codex automatically checks `
 ## Log
 Newest first. One entry per playground change.
 
+### #58 — 2026-07-06 — build slice: Prometheus HTTP client (slice-24, read-layer)
+- **What:** `promclient.Client.Query(ctx, promQL) (val, ok, err)` — issues a read-only GET to `/api/v1/query`, parses via `internal/readlayer/promusage`. Empty result → `ok=false` (missing, not error), same contract that flows a metrics gap into safety's exclusion. `New` trims trailing slash, accepts an injected `*http.Client`.
+- **Why:** the tool↔Prometheus HTTP integration is the next real read-layer piece and is fully offline-provable with `httptest`. Deliberately does NOT construct PromQL — those strings need a live Prometheus to validate, so query building stays a separate slice; the caller passes the query.
+- **Files:** `playground/slice-24-promclient/{promclient.go,promclient_test.go}`.
+- **Verified:** `go vet ./...` clean; `go test ./...` green — fetch+parse (asserts the query round-trips URL-decoded and hits `/api/v1/query`), empty=missing, non-200 errors, trailing-slash trim.
+- **On graduation:** `internal/readlayer/promclient`; the live reader pairs it with validated PromQL + `promusage.AssembleUsage` → `rs.Usage`.
+- **Codex status:** ⬜ awaiting review.
+
 ### #57 — 2026-07-06 — verify + coverage: `--json` carries caution/reasons (pinned)
 - **What:** verified the `--json` schema is honest for machine consumers — it already includes the JVM `caution` (omitempty) and per-workload exclusion `reason`s (unlike the PR body before #56). No bug. But no test pinned the caution field, so a refactor could silently drop it; added `TestRun_JSONIncludesCaution` (JVM input → JSON `caution` mentions "JVM").
 - **Why:** the JSON is a public contract; the safety caution must survive there for anyone automating off `--json`.
