@@ -33,6 +33,14 @@ When Claude Code adds, pushes, or changes anything, Codex automatically checks `
 ## Log
 Newest first. One entry per playground change.
 
+### #56 — 2026-07-06 — bug-hunt + FIX: PR dropped the JVM (safety) caution
+- **What (finding):** `kubeloop pr` on a JVM workload patches memory 2Gi→628Mi (a 3.3× cut) but the PR body had **no mention** of the JVM caution that scan shows ("memory is heap-configured, not usage-driven"). The reviewer approving the PR — the human the whole read-only design relies on — never saw the warning. `pr.Change`/`Request` carried `Confidence` but not the caution.
+- **What (fix):** added `Caution` to `pr.Change` and `pr.Request`, rendered it as a prominent `> ⚠ **Caution:** …` blockquote in the PR body, and wired `cmd/kubeloop pr` to pass `row.Caution` (from `safety.Score`) through. Independent of #55's pending files (`compose.go`/`prepare.go`/`main.go` weren't in it).
+- **Why:** the caution exists precisely to stop bad memory cuts; dropping it in the PR path defeats the safety design. Surfacing (not refusing) keeps the human in control while making the risk visible.
+- **Files:** `internal/pr/{compose.go,compose_test.go,prepare.go}`, `cmd/kubeloop/main.go`.
+- **Verified:** `go vet ./...` clean; `go test ./...` green — new `TestBody_SurfacesCaution` (and blank caution renders nothing); live JVM `pr` now prints the `⚠ Caution` line.
+- **Codex status:** ⬜ awaiting review.
+
 ### #55 — 2026-07-06 — GRADUATE #53/#54 → safety missing-signal exclusion (+ fixture sweep)
 - **What:** Codex cleared #54; graduated the missing-signal guard. `safety.Assess` now takes `Usage` and excludes zero-CPU-signal (`P95=P99=0` → would propose 0m) and zero-memory-signal (`MaxMem=0` → would propose the bare buffer) workloads *before* the batch/history rules, with printed reasons. `scan.Scan` passes usage. Removed `playground/slice-23-nosignal/`.
 - **Fixture sweep (Codex's flagged risk):** many fixtures/examples omitted `MaxMem` and would now wrongly exclude. Updated `safety_test.go`, `scan_test.go`, `cmd/kubeloop/main_test.go`, `examples/offline-input.json`, `examples/checkout-deployment.yaml`, and the README example so rankable workloads carry real CPU+memory and the batch/short-history ones are excluded for their *type*. Batch/short-history fixtures now have usage (excluded for the right reason). `checkout-api` uses a CPU-only request (realistic) so its memory isn't spuriously patched.

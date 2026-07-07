@@ -152,6 +152,7 @@ func runPR(args []string, out io.Writer) error {
 		MonthlyUSD:  row.MonthlyWaste,
 		Confidence:  row.Confidence,
 		Realization: savings.Realization(report.Mode),
+		Caution:     row.Caution,
 	})
 	if err != nil {
 		return err

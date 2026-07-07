@@ -15,6 +15,7 @@ type Change struct {
 	MonthlyUSD                 float64
 	Confidence                 string
 	Realization                string // e.g. savings.Realization(mode)
+	Caution                    string // e.g. the JVM memory caution; surfaced prominently
 }
 
 // Title is the PR title — the dollars lead, because that's what gets a review
@@ -40,6 +41,11 @@ func Body(c Change) string {
 
 	if c.Confidence != "" {
 		fmt.Fprintf(&b, "\nConfidence: **%s**.\n", c.Confidence)
+	}
+	// The caution (e.g. JVM heap sizing) is a reviewer-facing safety warning —
+	// make it stand out, not a footnote, so the human merging the PR sees it.
+	if c.Caution != "" {
+		fmt.Fprintf(&b, "\n> ⚠ **Caution:** %s\n", c.Caution)
 	}
 	b.WriteString("\n**Evidence:** proposed from observed usage with safety floors in code " +
 		"(CPU ≥ P99×1.2, memory ≥ max observed + buffer). Dollar figure uses directional " +

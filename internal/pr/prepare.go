@@ -9,6 +9,7 @@ type Request struct {
 	ProposedCPU, ProposedMem string
 	MonthlyUSD               float64
 	Confidence, Realization  string
+	Caution                  string
 }
 
 // Prepared is everything needed to open the PR, all computed offline.
@@ -43,6 +44,7 @@ func Prepare(r Request) (Prepared, error) {
 		CurrentCPU: r.CurrentCPU, ProposedCPU: r.ProposedCPU,
 		CurrentMem: r.CurrentMem, ProposedMem: r.ProposedMem,
 		MonthlyUSD: r.MonthlyUSD, Confidence: r.Confidence, Realization: r.Realization,
+		Caution: r.Caution,
 	}
 	return Prepared{
 		Path:    src.Path,

@@ -42,6 +42,18 @@ func TestBody_HasEvidenceRollbackAndReadOnly(t *testing.T) {
 	}
 }
 
+func TestBody_SurfacesCaution(t *testing.T) {
+	c := sample()
+	c.Caution = "JVM: memory request is heap-configured, not usage-driven"
+	b := Body(c)
+	if !strings.Contains(b, "⚠ **Caution:**") || !strings.Contains(b, "heap-configured") {
+		t.Errorf("body should surface the caution prominently:\n%s", b)
+	}
+	if strings.Contains(Body(sample()), "Caution:") {
+		t.Errorf("blank caution should not render a caution line")
+	}
+}
+
 func TestBody_OmitsUnchangedResource(t *testing.T) {
 	c := sample()
 	c.CurrentMem, c.ProposedMem = "512Mi", "512Mi" // unchanged
