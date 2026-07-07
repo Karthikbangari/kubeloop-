@@ -10,7 +10,7 @@ func TestCPU(t *testing.T) {
 			t.Errorf("CPU(%q) = %d, %v; want %d", s, got, err, want)
 		}
 	}
-	for _, bad := range []string{"", "abc", "10x", "m", "1.5.5"} {
+	for _, bad := range []string{"", "abc", "10x", "m", "1.5.5", "-1", "-100m", "NaN", "+Inf"} {
 		if _, err := CPU(bad); err == nil {
 			t.Errorf("CPU(%q) should error", bad)
 		}
@@ -34,7 +34,7 @@ func TestMem(t *testing.T) {
 			t.Errorf("Mem(%q) = %d, %v; want %d", s, got, err, want)
 		}
 	}
-	for _, bad := range []string{"", "abc", "512MB", "Gi", "1.2.3Mi"} {
+	for _, bad := range []string{"", "abc", "512MB", "Gi", "1.2.3Mi", "-1", "-1Gi", "NaN", "+Inf"} {
 		if _, err := Mem(bad); err == nil {
 			t.Errorf("Mem(%q) should error", bad)
 		}

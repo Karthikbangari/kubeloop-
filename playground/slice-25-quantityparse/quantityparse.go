@@ -12,6 +12,7 @@ package quantityparse
 
 import (
 	"fmt"
+	"math"
 	"strconv"
 	"strings"
 )
@@ -28,11 +29,17 @@ func CPU(s string) (int64, error) {
 		if err != nil {
 			return 0, fmt.Errorf("bad millicpu %q: %w", s, err)
 		}
+		if n < 0 {
+			return 0, fmt.Errorf("negative CPU quantity %q", s)
+		}
 		return n, nil
 	}
 	cores, err := strconv.ParseFloat(s, 64)
 	if err != nil {
 		return 0, fmt.Errorf("bad cpu %q: %w", s, err)
+	}
+	if cores < 0 || math.IsNaN(cores) || math.IsInf(cores, 0) {
+		return 0, fmt.Errorf("invalid CPU quantity %q", s)
 	}
 	return int64(cores*1000 + 0.5), nil
 }
@@ -60,12 +67,18 @@ func Mem(s string) (int64, error) {
 			if err != nil {
 				return 0, fmt.Errorf("bad memory %q: %w", s, err)
 			}
+			if n < 0 || math.IsNaN(n) || math.IsInf(n, 0) {
+				return 0, fmt.Errorf("invalid memory quantity %q", s)
+			}
 			return int64(n*suf.mul + 0.5), nil
 		}
 	}
 	n, err := strconv.ParseFloat(s, 64) // no suffix → bytes
 	if err != nil {
 		return 0, fmt.Errorf("bad memory %q: %w", s, err)
+	}
+	if n < 0 || math.IsNaN(n) || math.IsInf(n, 0) {
+		return 0, fmt.Errorf("invalid memory quantity %q", s)
 	}
 	return int64(n + 0.5), nil
 }
