@@ -33,6 +33,24 @@ When Claude Code adds, pushes, or changes anything, Codex automatically checks `
 ## Log
 Newest first. One entry per playground change.
 
+### #80 — 2026-07-08 — build slice: PR composer (slice-34, PR engine capstone)
+- **What:** `openpr.Open(ctx, Git, PRCreator, Request) (Result, error)` composes the three halves of a real pull request: the offline patch (`pr.Prepare`), the local git work (`gitrepo`, #75), and the GitHub API call (`ghclient`, #76). `gitrepo.Repo` and `ghclient.Client` sit behind `Git`/`PRCreator` interfaces, so every branch is testable without a token. This is the only path in kubeloop that produces an outward-facing side effect; the cluster is still never touched.
+- **Ordering is load-bearing, not incidental:**
+  1. **Resolve `origin` → owner/repo before mutating anything.** A non-GitHub remote (or a missing one) then fails while the tree is still untouched, rather than after a branch exists. Tested: on origin failure no branch/commit/push happens and the manifest is byte-for-byte unchanged.
+  2. Refuse a dirty tree — never sweep the user's uncommitted work into kubeloop's PR.
+  3. Resolve the write path *before* touching git, so a traversing path cannot escape the checkout.
+  4. branch → write → commit → push, and only then ask GitHub to open the PR (it 422s on an unpushed branch).
+- **The failure mode users would actually hit:** if the push succeeds but `CreatePR` fails (422, expired token, rate limit), `Result.Pushed`/`Result.Branch` are still returned and the error reads *"branch X was pushed, but opening the pull request failed: …"*. Otherwise the user hunts for a PR that does not exist and never learns a branch is now sitting on their remote.
+- **Path traversal guard:** `Prepared.Path` originates in a user-supplied `--manifest` argument. `safeJoin` refuses absolute paths and anything resolving outside `RepoDir` (`../outside.yaml`, `a/../../outside.yaml`, `/etc/passwd`, `""`). Without it kubeloop could write outside the checkout it was pointed at.
+- **Branch naming:** `kubeloop/rightsize-<ns>-<name>-<7-char sha of the patch>`. Stable, so re-running the same proposal collides with the existing branch and surfaces ghclient's honest "a pull request for this branch may already be open" rather than littering the remote; content-keyed, so a *different* proposal for the same workload gets its own branch. Invalid ref characters are sanitized.
+- **`--dry-run` touches nothing:** no branch, no commit, no push, no PR, and no file write. Asserted on all five.
+- **Verified — the local half is validated for real.** Beyond the fake-interface tests, two real-git tests run against a real filesystem with a local bare repo standing in for GitHub (only the POST is faked): the patched manifest is branched, committed and **pushed**, then asserted that the branch landed in origin with exactly the patched content, that `main` is **byte-for-byte untouched**, that the commit subject is the PR title's first line, and that **exactly one file** changed. A second test confirms the real implementation refuses a dirty tree, stays on `main`, and pushes nothing.
+- **⚠ The GitHub POST has still never run.** `ghclient` is httptest-only (#76); no request has reached github.com. No token exists in the build environment, and the PAT in the macOS keychain was deliberately not read.
+- **Not yet wired:** `kubeloop pr --open` lives in `cmd/`, the real tree — it waits on graduating 32–34.
+- **Files:** `playground/slice-34-openpr/{openpr.go,openpr_test.go,realgit_test.go}`.
+- **Verified:** `go vet` clean, `gofmt` clean, `make ci` green (24 packages), 11 tests.
+- **Codex status:** ⬜ awaiting review.
+
 ### #79 — 2026-07-08 — GRADUATE the live reader (slices 29–31) + ship `--from-cluster`
 - **Gate:** Codex reviewed and **approved** the live read-layer slices in #78, conditional on carrying its non-finite-sample fix. **Condition verified, not assumed:** that fix lives in `internal/readlayer/promusage`, which the graduated `clustersource` depends on; a `NaN` sample from a fake Prometheus aborts the live path with `sample value "NaN" not finite` rather than becoming plausible usage. First graduation in a while that passed the gate as designed rather than by user override.
 - **What:** `playground/slice-{29,30,31}-*` → `internal/readlayer/{kubeclient,promql,clustersource}` via `git mv` (history preserved). Only the cross-slice import path changed; the tests needed no edits. `playground/` now holds only the two PR-engine slices.
