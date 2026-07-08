@@ -2,7 +2,9 @@
 // workloads, ranks their waste in dollars, and prints a report (text or JSON).
 // Read-only always: the only write path in the product is a human-reviewed PR,
 // which this binary never performs. The live read-layer (kubeconfig +
-// Prometheus) is a later slice; today workloads come from --from-file.
+// Prometheus) is a later slice; today workloads come from --from-file (scan
+// inputs) or --from-manifests + --usage-file (raw Kubernetes manifests paired
+// with a usage export).
 package main
 
 import (
@@ -11,10 +13,12 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"strings"
 
 	pr "github.com/kubeloop/kubeloop/internal/pr"
 	"github.com/kubeloop/kubeloop/internal/pr/quantity"
+	"github.com/kubeloop/kubeloop/internal/readlayer/dirsource"
 	rp "github.com/kubeloop/kubeloop/internal/reporting"
 	rs "github.com/kubeloop/kubeloop/internal/rightsizing"
 	"github.com/kubeloop/kubeloop/internal/savings"
@@ -57,15 +61,14 @@ func runScan(args []string, out io.Writer) error {
 	jsonOut := fs.Bool("json", false, "machine-readable JSON output")
 	cloud := fs.String("cloud", "aws", "cloud for list pricing (aws|gcp|azure)")
 	fromFile := fs.String("from-file", "", "read workloads from a JSON file (offline; cluster read-layer TBD)")
+	fromManifests := fs.String("from-manifests", "", "read workloads from a directory of Kubernetes manifest JSON files (offline)")
+	usageFile := fs.String("usage-file", "", "JSON map of \"namespace/name\" -> {P95CPU,P99CPU,MaxMem,HistoryDays}, paired with --from-manifests")
 	pricingFile := fs.String("pricing-file", "", "override list prices from a pricing.json file")
 	perRequest := fs.Bool("per-request", false, "cluster bills per pod request (e.g. GKE Autopilot): savings are immediate")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
-	if *fromFile == "" {
-		return fmt.Errorf("--from-file required until the cluster read-layer lands")
-	}
-	inputs, err := loadInputs(*fromFile)
+	inputs, err := loadWorkloads(*fromFile, *fromManifests, *usageFile)
 	if err != nil {
 		return err
 	}
@@ -203,4 +206,79 @@ func loadInputs(path string) ([]scan.Input, error) {
 		return nil, fmt.Errorf("parse %s: trailing JSON data", path)
 	}
 	return inputs, nil
+}
+
+// loadWorkloads selects the offline input source: a single scan-input JSON file
+// (--from-file) or a directory of raw Kubernetes manifests paired with a usage
+// export (--from-manifests + --usage-file). Exactly one source is required; the
+// cluster read-layer is a later slice.
+func loadWorkloads(fromFile, fromManifests, usageFile string) ([]scan.Input, error) {
+	switch {
+	case fromFile != "" && fromManifests != "":
+		return nil, fmt.Errorf("use either --from-file or --from-manifests, not both")
+	case fromManifests != "":
+		return loadManifestDir(fromManifests, usageFile)
+	case fromFile != "":
+		if usageFile != "" {
+			return nil, fmt.Errorf("--usage-file applies to --from-manifests, not --from-file")
+		}
+		return loadInputs(fromFile)
+	default:
+		return nil, fmt.Errorf("--from-file or --from-manifests required until the cluster read-layer lands")
+	}
+}
+
+// loadManifestDir reads every *.json manifest in dir and attaches usage looked
+// up by "namespace/name" from usageFile (workloads with no usage entry are
+// excluded by the scanner's missing-signal rule, never sized on no data).
+func loadManifestDir(dir, usageFile string) ([]scan.Input, error) {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return nil, err
+	}
+	var manifests [][]byte
+	for _, e := range entries {
+		if e.IsDir() || !strings.HasSuffix(e.Name(), ".json") {
+			continue
+		}
+		b, err := os.ReadFile(filepath.Join(dir, e.Name()))
+		if err != nil {
+			return nil, err
+		}
+		manifests = append(manifests, b)
+	}
+	if len(manifests) == 0 {
+		return nil, fmt.Errorf("no .json manifests found in %s", dir)
+	}
+	usage, err := loadUsage(usageFile)
+	if err != nil {
+		return nil, err
+	}
+	return dirsource.Assemble(manifests, usage)
+}
+
+// loadUsage parses the "namespace/name" -> usage map. Unknown fields fail loudly
+// (a typo like "MaxMemory" would otherwise zero usage and silently exclude the
+// workload). An empty path yields no usage — every workload is then reported as
+// excluded with a reason rather than sized.
+func loadUsage(path string) (map[string]dirsource.Usage, error) {
+	if path == "" {
+		return nil, nil
+	}
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+	dec := json.NewDecoder(f)
+	dec.DisallowUnknownFields()
+	var usage map[string]dirsource.Usage
+	if err := dec.Decode(&usage); err != nil {
+		return nil, fmt.Errorf("parse %s: %w", path, err)
+	}
+	var extra any
+	if err := dec.Decode(&extra); err != io.EOF {
+		return nil, fmt.Errorf("parse %s: trailing JSON data", path)
+	}
+	return usage, nil
 }

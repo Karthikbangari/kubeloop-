@@ -72,7 +72,35 @@ go build -o bin/kubeloop ./cmd/kubeloop
 ./bin/kubeloop pr --from-file examples/offline-input.json --manifest examples/checkout-deployment.yaml --namespace shop --workload checkout-api --container app --out /tmp/checkout-deployment.patched.yaml
 ```
 
-Input is currently offline JSON shaped like [`examples/offline-input.json`](examples/offline-input.json). The offline `pr` subcommand prepares one patched manifest file and prints a PR title/body; it does not create branches, call GitHub, or touch the cluster. A future live read-layer will replace `--from-file` with kubeconfig and Prometheus collection. Read-only RBAC manifest for that path: [`deploy/rbac.yaml`](deploy/rbac.yaml).
+### Scanning real manifests (`--from-manifests`)
+
+Point kubeloop at a directory of Kubernetes manifests (JSON, as from `kubectl get -o json`) and a usage export, and it reads the current requests straight from the manifests — no cluster access:
+
+```bash
+./bin/kubeloop scan --from-manifests examples/manifests --usage-file examples/manifests-usage.json
+```
+
+```
+WORKLOAD      CURRENT      PROPOSED    $/MONTH  CONF
+checkout-api  2000m/512Mi  576m/428Mi  $32.48   high
+search        1000m/2.0Gi  420m/628Mi  $17.38   med
+
+Estimated waste: $49.85/month across 2 workloads.
+  ! search: JVM: memory request is heap-configured, not usage-driven — treat the memory number as a caution
+  -> realized when nodes consolidate (Cluster Autoscaler / Karpenter)
+```
+
+The usage export is a JSON map keyed by `namespace/name` — see [`examples/manifests-usage.json`](examples/manifests-usage.json):
+
+```json
+{
+  "shop/checkout-api": { "P95CPU": 410, "P99CPU": 480, "MaxMem": 314572800, "HistoryDays": 30 }
+}
+```
+
+A workload with no usage entry is **excluded with a printed reason**, never sized on no data. A typo in the usage file is a hard error, not a silently-dropped field.
+
+Input can also be pre-assembled scan JSON shaped like [`examples/offline-input.json`](examples/offline-input.json). The offline `pr` subcommand prepares one patched manifest file and prints a PR title/body; it does not create branches, call GitHub, or touch the cluster. A future live read-layer will replace these flags with kubeconfig and Prometheus collection. Read-only RBAC manifest for that path: [`deploy/rbac.yaml`](deploy/rbac.yaml).
 
 ## FAQ
 

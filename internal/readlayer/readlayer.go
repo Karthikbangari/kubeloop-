@@ -23,27 +23,34 @@ type Workload struct {
 	Usage          rs.Usage
 }
 
-// ToScanInputs converts fake inventory records to the stable offline scan
-// input. It is intentionally pure: no kubeconfig, no Prometheus, no file IO.
+// ToScanInput converts one inventory record to the stable offline scan input.
+// It is intentionally pure: no kubeconfig, no Prometheus, no file IO. The
+// manifest read-layer (readlayer/manifestsource) reuses this so there is a
+// single place that assembles a scan.Input from a workload.
+func ToScanInput(w Workload) scan.Input {
+	allContainers := append([]inventory.Container{}, w.Containers...)
+	allContainers = append(allContainers, w.InitContainers...)
+	return scan.Input{
+		Workload: rp.Workload{
+			Namespace: w.Namespace,
+			Name:      w.Name,
+			Replicas:  w.Replicas,
+			Current:   inventory.PodRequest(w.Containers, w.InitContainers),
+			Usage:     w.Usage,
+		},
+		Meta: sf.Meta{
+			Kind:        w.Kind,
+			HistoryDays: w.HistoryDays,
+			Runtime:     inventory.DetectRuntime(allContainers),
+		},
+	}
+}
+
+// ToScanInputs converts many inventory records to the stable offline scan input.
 func ToScanInputs(ws []Workload) []scan.Input {
 	out := make([]scan.Input, len(ws))
 	for i, w := range ws {
-		allContainers := append([]inventory.Container{}, w.Containers...)
-		allContainers = append(allContainers, w.InitContainers...)
-		out[i] = scan.Input{
-			Workload: rp.Workload{
-				Namespace: w.Namespace,
-				Name:      w.Name,
-				Replicas:  w.Replicas,
-				Current:   inventory.PodRequest(w.Containers, w.InitContainers),
-				Usage:     w.Usage,
-			},
-			Meta: sf.Meta{
-				Kind:        w.Kind,
-				HistoryDays: w.HistoryDays,
-				Runtime:     inventory.DetectRuntime(allContainers),
-			},
-		}
+		out[i] = ToScanInput(w)
 	}
 	return out
 }

@@ -1,0 +1,19 @@
+{
+  "kind": "Deployment",
+  "metadata": { "name": "search", "namespace": "shop" },
+  "spec": {
+    "replicas": 1,
+    "template": {
+      "spec": {
+        "containers": [
+          {
+            "name": "app",
+            "image": "eclipse-temurin:21-jre",
+            "command": ["java", "-jar", "search.jar"],
+            "resources": { "requests": { "cpu": "1000m", "memory": "2Gi" } }
+          }
+        ]
+      }
+    }
+  }
+}

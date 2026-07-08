@@ -35,3 +35,8 @@ Graduated:
 - `slice-17-locator/` and `slice-18-prprepare/` moved to `../internal/pr/`.
 - `slice-19-quantity/` moved to `../internal/pr/quantity/`.
 - `slice-20-reduceonly/` and `slice-21-rowselect/` moved to `../internal/pr/`.
+- `slice-24-promclient/` moved to `../internal/readlayer/promclient/`.
+- `slice-25-quantityparse/` moved to `../internal/readlayer/quantityparse/`.
+- `slice-26-kubeparse/` moved to `../internal/readlayer/kubeparse/`.
+- `slice-27-manifestsource/` moved to `../internal/readlayer/manifestsource/`.
+- `slice-28-dirsource/` moved to `../internal/readlayer/dirsource/`; now backs the CLI's `--from-manifests` mode.

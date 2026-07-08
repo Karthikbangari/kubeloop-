@@ -135,6 +135,99 @@ func TestRun_RequiresFromFile(t *testing.T) {
 	}
 }
 
+// manifestDir writes a JVM deployment (rankable, carries a caution) and an
+// un-instrumented one (no usage entry → excluded, never sized), plus a usage
+// export keyed by namespace/name. Returns the manifest dir and the usage path.
+func manifestDir(t *testing.T) (string, string) {
+	t.Helper()
+	dir := t.TempDir()
+	deploy := func(name, image, cpu string) string {
+		return `{"kind":"Deployment","metadata":{"name":"` + name + `","namespace":"shop"},` +
+			`"spec":{"replicas":1,"template":{"spec":{"containers":[{"name":"app","image":"` + image + `",` +
+			`"resources":{"requests":{"cpu":"` + cpu + `","memory":"2Gi"}}}]}}}}`
+	}
+	write := func(name, body string) {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte(body), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	write("search.json", deploy("search", "eclipse-temurin:21-jre", "1000m"))
+	write("no-metrics.json", deploy("no-metrics", "nginx", "1000m"))
+	write("notes.txt", "ignored: not a .json manifest")
+
+	usage := filepath.Join(t.TempDir(), "usage.json")
+	body := `{"shop/search":{"P95CPU":300,"P99CPU":350,"MaxMem":524288000,"HistoryDays":30}}`
+	if err := os.WriteFile(usage, []byte(body), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	return dir, usage
+}
+
+// The offline manifest read path end to end: manifests + usage export → ranked
+// report, with the un-instrumented workload excluded rather than sized on no data.
+func TestRun_FromManifests(t *testing.T) {
+	dir, usage := manifestDir(t)
+	var out bytes.Buffer
+	if err := Run([]string{"scan", "--json", "--from-manifests", dir, "--usage-file", usage}, &out); err != nil {
+		t.Fatal(err)
+	}
+	var r jsonReport
+	if err := json.Unmarshal(out.Bytes(), &r); err != nil {
+		t.Fatalf("invalid JSON: %v\n%s", err, out.String())
+	}
+	if len(r.Workloads) != 1 || r.Workloads[0].Name != "search" {
+		t.Fatalf("want only search ranked, got %+v", r.Workloads)
+	}
+	// Current requests come from the manifest; the proposal from the usage export.
+	if r.Workloads[0].CurrentCPUMillicores != 1000 || r.Workloads[0].ProposedCPUMillicores != 420 {
+		t.Errorf("current/proposed CPU = %d/%d, want 1000/420 (P99×1.2)",
+			r.Workloads[0].CurrentCPUMillicores, r.Workloads[0].ProposedCPUMillicores)
+	}
+	if r.Workloads[0].Caution == "" {
+		t.Error("JVM caution should survive the manifest read path")
+	}
+	if len(r.Excluded) != 1 || r.Excluded[0].Name != "no-metrics" {
+		t.Fatalf("want no-metrics excluded (metrics gap), got %+v", r.Excluded)
+	}
+}
+
+func TestRun_FromManifestsRejectsBothSources(t *testing.T) {
+	dir, usage := manifestDir(t)
+	err := Run([]string{"--from-file", sampleFile(t), "--from-manifests", dir, "--usage-file", usage}, &bytes.Buffer{})
+	if err == nil || !strings.Contains(err.Error(), "not both") {
+		t.Fatalf("want mutually-exclusive-source error, got %v", err)
+	}
+}
+
+// A typo in the usage export must fail loudly rather than zero usage and
+// silently exclude the workload with a misleading "metrics gap" reason.
+func TestRun_FromManifestsRejectsUnknownUsageField(t *testing.T) {
+	dir, _ := manifestDir(t)
+	usage := filepath.Join(t.TempDir(), "usage.json")
+	if err := os.WriteFile(usage, []byte(`{"shop/search":{"MaxMemory":1}}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	err := Run([]string{"--from-manifests", dir, "--usage-file", usage}, &bytes.Buffer{})
+	if err == nil || !strings.Contains(err.Error(), "unknown field") {
+		t.Fatalf("want unknown-field error, got %v", err)
+	}
+}
+
+func TestRun_FromManifestsEmptyDirErrors(t *testing.T) {
+	err := Run([]string{"--from-manifests", t.TempDir()}, &bytes.Buffer{})
+	if err == nil || !strings.Contains(err.Error(), "no .json manifests") {
+		t.Fatalf("want empty-dir error, got %v", err)
+	}
+}
+
+func TestRun_UsageFileRejectedWithFromFile(t *testing.T) {
+	_, usage := manifestDir(t)
+	err := Run([]string{"--from-file", sampleFile(t), "--usage-file", usage}, &bytes.Buffer{})
+	if err == nil || !strings.Contains(err.Error(), "--usage-file applies to --from-manifests") {
+		t.Fatalf("want usage-file misuse error, got %v", err)
+	}
+}
+
 // A misspelled field must fail loudly, not silently zero usage and drop the
 // workload with a misleading "metrics gap" reason.
 func TestRun_RejectsUnknownInputField(t *testing.T) {

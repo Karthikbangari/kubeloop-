@@ -33,6 +33,20 @@ When Claude Code adds, pushes, or changes anything, Codex automatically checks `
 ## Log
 Newest first. One entry per playground change.
 
+### #71 — 2026-07-08 — GRADUATE the read-layer (slices 24–28) + ship `--from-manifests`
+- **Process note (read this):** the RULEBOOK's rule 3 says nothing leaves `playground/` until **Codex** approves. No Codex had run against slices 24–28 (#58–#63 all sat at ⬜) at the time of graduation; **the user explicitly overrode the gate** and directed Claude to review and graduate, so the graduation itself carried a *Claude* review. Codex has since reviewed and approved (user-reported, 2026-07-08), which retroactively closes the gate on the read-layer code in #58–#63.
+- **What (graduation):** the five read-layer slices moved out of `playground/` (via `git mv`, history preserved) into `internal/readlayer/`: `promclient`, `quantityparse`, `kubeparse`, `manifestsource`, `dirsource`. Imports repointed from the `playground/slice-NN-*` paths to `internal/readlayer/*`. Test files needed no edits (they only imported packages that didn't move).
+- **What (two cleanups found in review, not blind copies):**
+  1. `manifestsource.FromManifest` duplicated the exact `scan.Input` assembly already in `readlayer.ToScanInputs`. Split `readlayer.ToScanInput` (singular) out of `ToScanInputs` and made `manifestsource` call it — now **one place** turns a workload into scan input, so the offline manifest path and the future live cluster reader can't drift.
+  2. Paid off `dirsource`'s `ponytail:` debt (it parsed each manifest twice — once for the lookup key, once inside `FromManifest`). Added `manifestsource.FromWorkload(kubeparse.Workload, …)` which takes an already-parsed workload; `Assemble` now parses once. `FromManifest` is retained as parse+`FromWorkload`.
+- **What (feature):** `kubeloop scan --from-manifests DIR --usage-file USAGE.json` — reads every `*.json` manifest in DIR, attaches usage from a `namespace/name`-keyed export, and ranks waste with no cluster access. This makes the offline manifest path a real product mode (a GitOps repo's manifests + a Prometheus usage dump), not just an internal proof.
+- **Why the flag shape:** `--from-file` (pre-assembled scan JSON) and `--from-manifests` (raw manifests) are mutually exclusive sources — passing both errors, and `--usage-file` with `--from-file` errors, rather than silently ignoring one. Consistent with the #68/#69 fail-loud posture: an unknown field in the usage export is a hard error, not a silently-zeroed usage that would exclude the workload with a misleading "metrics gap" reason.
+- **Guardrail held:** a workload with no usage entry is **excluded with a printed reason**, never sized on no data (verified live — both example workloads excluded when `--usage-file` is omitted).
+- **Files:** moved `playground/slice-2{4,5,6,7,8}-*/` → `internal/readlayer/{promclient,quantityparse,kubeparse,manifestsource,dirsource}/`; `internal/readlayer/readlayer.go` (+`ToScanInput`); `cmd/kubeloop/{main.go,main_test.go}`; new `examples/manifests/{checkout-api,search}.json`, `examples/manifests-usage.json`; docs: `README.md`, `docs/architecture.md`, `playground/README.md`.
+- **Verified:** `make ci` green (`go vet` clean, `go test ./...` all 18 packages). 5 new CLI tests: `TestRun_FromManifests` (end-to-end manifests+usage → ranked report, JVM caution survives, un-instrumented workload excluded), `TestRun_FromManifestsRejectsBothSources`, `TestRun_FromManifestsRejectsUnknownUsageField`, `TestRun_FromManifestsEmptyDirErrors`, `TestRun_UsageFileRejectedWithFromFile`. Live: `scan --from-manifests examples/manifests --usage-file examples/manifests-usage.json` → `$49.85/month across 2 workloads` with the JVM caution on `search`; `--json` schema intact; omitting `--usage-file` excludes both with metrics-gap reasons; a `"MaxMemory"` typo exits 1 with `unknown field`.
+- **Still cluster-gated (unchanged):** the kube API **LIST** call and **validated PromQL** strings. `promclient` graduated but takes the query as input for exactly that reason.
+- **Codex status:** ✅ approved (user-reported, 2026-07-08). Covers the graduated read-layer code from #58–#63.
+
 ### #70 — 2026-07-06 — feature: `kubeloop --version` (+ GoReleaser stamping)
 - **What (gap):** a shipping CLI with no way to report its version — `kubeloop --version` errored ("flag provided but not defined"), and GoReleaser had no `ldflags`, so released binaries couldn't identify themselves (critical for support/bug reports).
 - **What:** added a `version` var (`"dev"` default) stamped at release via `-ldflags "-X main.version=..."`; `Run` handles `--version`/`version` → `kubeloop <version>`. Added the ldflags to `.goreleaser.yaml`.
@@ -93,7 +107,7 @@ Newest first. One entry per playground change.
 - **Files:** `playground/slice-28-dirsource/{dirsource.go,dirsource_test.go}` (imports siblings slice-26/27; graduates with the read-layer group).
 - **Verified:** `go vet ./...` clean; `go test ./...` green — two manifests, one with usage → ranked, one without → excluded via missing-signal with a reason; malformed manifest errors.
 - **On graduation:** `internal/readlayer`; add a `--from-manifests <dir> --usage <file>` CLI mode.
-- **Codex status:** ⬜ awaiting review.
+- **Codex status:** ✅ approved (2026-07-08, with the #71 graduation).
 
 ### #62 — 2026-07-06 — docs: architecture reflects real read-layer status
 - **What:** the architecture doc's "Not built yet" claimed the Prometheus client and `apimachinery` quantity parsing didn't exist — both now do (`promclient`, `quantityparse`, `kubeparse`, `manifestsource`, built #58–#61). Rewrote it into a "Read-layer status" section listing the built offline halves and a tightened "Not built yet" naming only the genuinely cluster-gated remnants (live kube LIST, validated PromQL, GitHub PR creation).
@@ -108,7 +122,7 @@ Newest first. One entry per playground change.
 - **Files:** `playground/slice-27-manifestsource/{manifestsource.go,manifestsource_test.go}` (imports sibling slice-26; graduates with the read-layer group).
 - **Verified:** `go vet ./...` clean; `go test ./...` green — end-to-end: real Deployment JSON → scan.Input (current 2000m/1Gi from manifest, replicas 2, jvm) → `scan.Scan` ranks it (proposed 576m) with the JVM caution surfaced; parse error propagates.
 - **On graduation:** `internal/readlayer` alongside the existing offline assembly; the live reader wraps kube-LIST + Prometheus around it.
-- **Codex status:** ⬜ awaiting review.
+- **Codex status:** ✅ approved (2026-07-08, with the #71 graduation).
 
 ### #60 — 2026-07-06 — build slice: kube-object → inventory parser (slice-26, read-layer)
 - **What:** `kubeparse.Parse(json)` reads a serialized Deployment/StatefulSet (kube API / `kubectl get -o json`) → `Workload{Kind,Namespace,Name,Replicas,Containers,InitContainers}` with requests parsed via `quantityparse` (#59). Replicas default to 1; a malformed request quantity errors (not a silent 0); absent requests → 0. Output feeds `inventory.PodRequest`/`DetectRuntime` directly.
@@ -116,7 +130,7 @@ Newest first. One entry per playground change.
 - **Files:** `playground/slice-26-kubeparse/{kubeparse.go,kubeparse_test.go}` (imports the sibling `slice-25-quantityparse`; both graduate together).
 - **Verified:** `go vet ./...` clean; `go test ./...` green — full multi/init-container parse (PodRequest 2250m, jvm detected), replicas default, malformed-quantity error, absent-requests-zero.
 - **On graduation:** `internal/inventory` (with quantityparse); the live reader wraps a kube client LIST around it.
-- **Codex status:** ⬜ awaiting review.
+- **Codex status:** ✅ approved (2026-07-08, with the #71 graduation).
 
 ### #59 — 2026-07-06 — build slice: k8s quantity parser (slice-25, read-layer)
 - **What:** `quantityparse.CPU(s)` → millicores ("2000m"→2000, "1.5"→1500) and `quantityparse.Mem(s)` → bytes ("512Mi", "1Gi", "1G", plain bytes). Correct-or-error; the inverse of the shipped `internal/pr/quantity` formatter and the read-layer's bridge from real kube objects' request strings to the numbers the scanner uses.
@@ -124,7 +138,7 @@ Newest first. One entry per playground change.
 - **Files:** `playground/slice-25-quantityparse/{quantityparse.go,quantityparse_test.go}`.
 - **Verified:** `go vet ./...` clean; `go test ./...` green — CPU milli/cores/fractional + bad forms error; memory Ki/Mi/Gi/decimal/plain + bad forms error; parses the formatter's canonical output.
 - **On graduation:** `internal/inventory` (or a shared quantity pkg with the formatter); update the architecture doc's "apimachinery quantity parsing" note. The live kube reader uses it to fill `inventory.Container`.
-- **Codex status:** ⬜ awaiting review.
+- **Codex status:** ✅ approved (2026-07-08, with the #71 graduation).
 
 ### #58 — 2026-07-06 — build slice: Prometheus HTTP client (slice-24, read-layer)
 - **What:** `promclient.Client.Query(ctx, promQL) (val, ok, err)` — issues a read-only GET to `/api/v1/query`, parses via `internal/readlayer/promusage`. Empty result → `ok=false` (missing, not error), same contract that flows a metrics gap into safety's exclusion. `New` trims trailing slash, accepts an injected `*http.Client`.
@@ -132,7 +146,7 @@ Newest first. One entry per playground change.
 - **Files:** `playground/slice-24-promclient/{promclient.go,promclient_test.go}`.
 - **Verified:** `go vet ./...` clean; `go test ./...` green — fetch+parse (asserts the query round-trips URL-decoded and hits `/api/v1/query`), empty=missing, non-200 errors, trailing-slash trim.
 - **On graduation:** `internal/readlayer/promclient`; the live reader pairs it with validated PromQL + `promusage.AssembleUsage` → `rs.Usage`.
-- **Codex status:** ⬜ awaiting review.
+- **Codex status:** ✅ approved (2026-07-08, with the #71 graduation).
 
 ### #57 — 2026-07-06 — verify + coverage: `--json` carries caution/reasons (pinned)
 - **What:** verified the `--json` schema is honest for machine consumers — it already includes the JVM `caution` (omitempty) and per-workload exclusion `reason`s (unlike the PR body before #56). No bug. But no test pinned the caution field, so a refactor could silently drop it; added `TestRun_JSONIncludesCaution` (JVM input → JSON `caution` mentions "JVM").

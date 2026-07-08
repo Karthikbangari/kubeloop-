@@ -1,0 +1,18 @@
+{
+  "kind": "Deployment",
+  "metadata": { "name": "checkout-api", "namespace": "shop" },
+  "spec": {
+    "replicas": 1,
+    "template": {
+      "spec": {
+        "containers": [
+          {
+            "name": "app",
+            "image": "ghcr.io/shop/checkout-api:1.4.2",
+            "resources": { "requests": { "cpu": "2000m", "memory": "512Mi" } }
+          }
+        ]
+      }
+    }
+  }
+}

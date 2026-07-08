@@ -9,7 +9,7 @@ import (
 	"fmt"
 
 	"github.com/kubeloop/kubeloop/internal/inventory"
-	quantityparse "github.com/kubeloop/kubeloop/playground/slice-25-quantityparse"
+	"github.com/kubeloop/kubeloop/internal/readlayer/quantityparse"
 )
 
 // Workload is one parsed object: identity plus its containers, ready for

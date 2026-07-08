@@ -1,0 +1,4 @@
+{
+  "shop/checkout-api": { "P95CPU": 410, "P99CPU": 480, "MaxMem": 314572800, "HistoryDays": 30 },
+  "shop/search":       { "P95CPU": 300, "P99CPU": 350, "MaxMem": 524288000, "HistoryDays": 30 }
+}
