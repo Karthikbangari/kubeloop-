@@ -9,6 +9,7 @@ package promusage
 import (
 	"encoding/json"
 	"fmt"
+	"math"
 	"strconv"
 
 	rs "github.com/kubeloop/kubeloop/internal/rightsizing"
@@ -48,6 +49,9 @@ func Scalar(body []byte) (val float64, ok bool, err error) {
 	v, err := strconv.ParseFloat(s, 64)
 	if err != nil {
 		return 0, false, fmt.Errorf("sample value %q not numeric: %w", s, err)
+	}
+	if math.IsNaN(v) || math.IsInf(v, 0) {
+		return 0, false, fmt.Errorf("sample value %q not finite", s)
 	}
 	return v, true, nil
 }

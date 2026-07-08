@@ -42,6 +42,15 @@ func TestScalar_MalformedErrors(t *testing.T) {
 	}
 }
 
+func TestScalar_NonFiniteSampleErrors(t *testing.T) {
+	for _, sample := range []string{"NaN", "+Inf", "-Inf"} {
+		body := `{"status":"success","data":{"result":[{"value":[1,"` + sample + `"]}]}}`
+		if _, _, err := Scalar([]byte(body)); err == nil {
+			t.Errorf("Scalar(%q) error = nil, want non-finite sample error", sample)
+		}
+	}
+}
+
 func TestCoresToMilli_Rounds(t *testing.T) {
 	cases := map[float64]int64{0.41: 410, 0.4104: 410, 0.4106: 411, 2: 2000, 0: 0}
 	for cores, want := range cases {

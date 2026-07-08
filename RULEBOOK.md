@@ -33,6 +33,14 @@ When Claude Code adds, pushes, or changes anything, Codex automatically checks `
 ## Log
 Newest first. One entry per playground change.
 
+### #78 — 2026-07-08 — Codex review: reject non-finite Prometheus samples before sizing
+- **Finding:** `promusage.Scalar` accepted Prometheus sample strings `NaN`, `+Inf`, and `-Inf` because `strconv.ParseFloat` treats them as valid floats. Those non-finite values then flowed into `promusage.AssembleUsage`, where float-to-int conversion could turn a bad Prometheus sample into plausible-looking usage instead of aborting the live read-layer.
+- **Fix:** `Scalar` now rejects non-finite parsed values with an error. That preserves the existing safety contract: no data is `ok=false` and becomes an exclusion with a reason; malformed or nonsensical data is an error and aborts collection.
+- **Regression:** `TestScalar_NonFiniteSampleErrors` covers `NaN`, `+Inf`, and `-Inf`.
+- **Live recheck:** on `kind-kubeloop`, Prometheus at `127.0.0.1:9090` returned real scalar values for the generated `busy` CPU and memory queries; `HistoryDays` returned no data on the minutes-old cluster, matching the fail-safe exclusion path. The real-pod overmatch check still holds: `checkout-api-[a-z0-9]+-[a-z0-9]+` matched 2 pods, while loose `checkout-api-.*` matched 3 by sweeping in `checkout-api-v2`.
+- **Verified:** targeted `go test ./internal/readlayer/promusage ./playground/slice-30-promql ./playground/slice-31-clustersource` green; `make ci` green.
+- **Codex status:** ✅ approved for the live read-layer playground slices after this parser hardening. Do not graduate without carrying this fix.
+
 ### #77 — 2026-07-08 — LIVE VALIDATION of the read-layer against a real cluster + Prometheus (+ 1 real bug fixed)
 - **Setup:** kind (k8s v1.36.1) + kube-prometheus-stack via helm; namespace `shop` with a padded Deployment (`checkout-api`, 2×2000m/512Mi), a deliberately-named sibling (`checkout-api-v2`), a StatefulSet (`pg`), and CPU burners (`busy`, `churn`). Drove slices 29→30→31 end to end with a temporary `livecheck` harness (not committed).
 - **REAL BUG FOUND AND FIXED — `HistoryDays` measured the longest-lived *pod*, not the workload.** It was `max(count_over_time(sum by (pod) (…)[30d:1d]))`. Pods are replaced on every deploy, so a workload that has run for a year but ships daily has no pod older than a day → reports HistoryDays≈1 → **silently excluded by safety as "<7d of history."** Teams that deploy frequently would watch their entire cluster vanish from the report, with no error and no explanation. Fix: aggregate the `pod` label away *before* counting — `count_over_time(sum(…)[30d:1d])` — which counts the days on which *any* pod of the workload existed.
@@ -46,7 +54,7 @@ Newest first. One entry per playground change.
 - **Still unvalidated:** 7-day windowing behaviour, which needs a cluster with a week of history. The `[7d:5m]` shape returns data only once a workload has lived across an aligned step.
 - **Files:** `playground/slice-30-promql/{promql.go,promql_test.go}` (HistoryDays fix, doc rewrite, 2 new regression tests).
 - **Verified:** `go vet` clean, `gofmt` clean, `make ci` green.
-- **Codex status:** ⬜ awaiting review.
+- **Codex status:** ✅ approved after Codex follow-up #78.
 
 ### #76 — 2026-07-08 — build slice: GitHub PR creation over the REST API (slice-33, PR engine)
 - **What:** `ghclient.CreatePR(ctx, owner, repo, PullRequest) (Created, error)` — one `POST /repos/{owner}/{repo}/pulls` with plain `net/http`. No SDK: a single POST does not justify a dependency tree, and the project stays on yaml.v3. Plus `TokenFromEnv()` (`GITHUB_TOKEN` then `GH_TOKEN`).
