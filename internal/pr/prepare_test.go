@@ -63,10 +63,10 @@ func TestPrepare_EndToEnd(t *testing.T) {
 // guard does. (singleContainerDoc is defined in guards_test.go, same package.)
 func TestPrepare_RefusesRoundingNoOp(t *testing.T) {
 	_, err := Prepare(Request{
-		Files:       []File{{Path: "d.yaml", Content: []byte(singleContainerDoc)}},
-		Ref:         Ref{Kind: "Deployment", Name: "app", Namespace: "shop"},
-		Container:   "app",
-		CurrentCPU:  "2000m", ProposedCPU: "", // CPU unchanged
+		Files:      []File{{Path: "d.yaml", Content: []byte(singleContainerDoc)}},
+		Ref:        Ref{Kind: "Deployment", Name: "app", Namespace: "shop"},
+		Container:  "app",
+		CurrentCPU: "2000m", ProposedCPU: "", // CPU unchanged
 		CurrentMem: "501Mi", ProposedMem: "501Mi", // same string → no real change
 	})
 	if err == nil || !strings.Contains(err.Error(), "rounds to the current request") {

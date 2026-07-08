@@ -14,8 +14,9 @@ func approx(a, b float64) bool { return a-b < 0.01 && b-a < 0.01 }
 
 // Two rankable deployments plus a CronJob and a too-new deployment that must be
 // excluded. CPU-only clean price so the math is hand-checkable:
-//   recommendations: freed 2920 ×$0.0001×2×730 = $426.32  (ranked first)
-//   checkout-api:    freed 1424 ×$0.0001×1×730 = $103.95
+//
+//	recommendations: freed 2920 ×$0.0001×2×730 = $426.32  (ranked first)
+//	checkout-api:    freed 1424 ×$0.0001×1×730 = $103.95
 func fixtures() []Input {
 	dep := func(days int) sf.Meta { return sf.Meta{Kind: "Deployment", HistoryDays: days} }
 	// All workloads carry real CPU + memory signal, so the batch/short-history

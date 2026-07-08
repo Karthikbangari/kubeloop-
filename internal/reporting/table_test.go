@@ -10,8 +10,9 @@ import (
 func approx(a, b float64) bool { return a-b < 0.01 && b-a < 0.01 }
 
 // Two workloads, CPU-only clean price so the math is hand-checkable.
-//   checkout-api:    2000→576 (P99×1.2), freed 1424 ×$0.0001×1×730 = $103.952
-//   recommendations: 4000→1080,          freed 2920 ×$0.0001×2×730 = $426.320
+//
+//	checkout-api:    2000→576 (P99×1.2), freed 1424 ×$0.0001×1×730 = $103.952
+//	recommendations: 4000→1080,          freed 2920 ×$0.0001×2×730 = $426.320
 func fixtures() []Workload {
 	return []Workload{
 		{Name: "checkout-api", Replicas: 1, Current: rs.Resources{CPU: 2000}, Usage: rs.Usage{P95CPU: 410, P99CPU: 480}},
