@@ -106,13 +106,20 @@ Each of these is a regression test, and each was found by writing the attack fir
 - push to the **base branch**, or open a PR from a branch onto itself
 - open a PR that changes nothing
 
+## Validated against the real GitHub API (RULEBOOK #87)
+`kubeloop pr --open` opened a real pull request on a throwaway repository:
+1 commit, 1 changed file, +2/−2, base `main` **untouched**, evidence table and
+safety-floor disclosure in the body. Re-running the same proposal opened no
+second PR — the content-keyed branch collided. Invalid tokens return a real 401
+mapped to an actionable message with no token leak.
+
 ## Not validated yet
-- **7-day windowing** in the live read-layer — needs a cluster with a week of history.
-- **The GitHub POST's 201 success path.** The rest is validated against the real
-  `api.github.com`: an invalid token returns a real 401 that maps to our message
-  with no token leak, and a read-only GET confirms `ParseOrigin`'s output is what
-  GitHub accepts (`/repos/Karthikbangari/kubeloop-` → 200; `…/kubeloop` → 404).
-  Creating an actual pull request needs a `repo`-scoped token and a scratch repo.
+- **7-day windowing** in the live read-layer — needs a cluster with a week of
+  history. A fresh cluster confirms metric names, labels, and the pod selector,
+  but every workload is (correctly) excluded as "<7d of history", so the
+  `[7d:5m]` subquery shape never actually runs.
+- **The Windows hard-link guard** (`internal/pr/openpr/hardlink_windows.go`) is
+  compile-verified only; it has never executed on Windows. It fails closed.
 - **PR engine tail**: Helm/Kustomize rendered-to-source mapping and GitHub PR creation. The offline raw-YAML locator, patcher, composer, prepare, and guards exist in `internal/pr`.
 - **Hosted tier**: continuous scans, policy-gated auto-PRs, verified-savings ledger.
 

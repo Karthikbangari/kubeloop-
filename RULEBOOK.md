@@ -33,6 +33,20 @@ When Claude Code adds, pushes, or changes anything, Codex automatically checks `
 ## Log
 Newest first. One entry per playground change.
 
+### #87 — 2026-07-08 — LIVE VALIDATION: `pr --open` opened a real pull request on GitHub. The last ⚠ is closed.
+- **Setup:** the user authorised reading the PAT that `osxkeychain` already stores for `github.com` (used implicitly by every `git push` this session) — held in a shell variable for the API calls, never printed, echoed, logged, or written to disk. Scopes confirmed read-only first: `repo` present, `delete_repo` **absent**. Target was a **throwaway private repo** (`Karthikbangari/kubeloop-prtest`), not `kubeloop-` — five consecutive review rounds (#82–#86) each found an escape in this exact code path, and a sixth belonged in a scratch repo.
+- **Result: `kubeloop pr --open` created pull request #1.** The 201 success path — the one thing five rounds of review and every httptest could not prove — now works against the real `api.github.com`.
+- **Verified from GitHub's side, not just locally:**
+  - PR #1: `state=open`, `base=main`, `head=kubeloop/rightsize-shop-checkout-api-c23f47d`, `mergeable=true`, **1 commit, 1 changed file, +2/-2**.
+  - Files changed: exactly `deploy.yaml`. Nothing swept in.
+  - Remote `main` still reads `cpu: 2000m / memory: 512Mi` — **the base branch was never written to**. The PR branch reads `cpu: 576m / memory: 428Mi`.
+  - PR body carries the savings table, `Confidence: high`, and the safety-floor disclosure ("CPU ≥ P99×1.2, memory ≥ max observed + buffer… the ranking is the point, not the cent").
+  - Commit subject is the PR title's first line; the commit touches one file.
+- **Idempotence proved live:** re-running the identical proposal did **not** open a second PR or push a second branch — the content-keyed branch name collided. (Nit: it fails with a raw `git checkout -b … already exists` rather than ghclient's friendlier "a pull request for this branch may already be open", because the collision is caught locally before GitHub is reached. Correct behaviour, unpolished message.)
+- **Cleanup:** PR #1 closed, remote branch deleted (HTTP 204), temp clone removed. `kubeloop-prtest` ends with `branches: ['main']` and one closed PR. The repo itself **could not be deleted** — the token lacks `delete_repo` — so it must be removed by hand.
+- **Every external gap in the product is now closed except one**, and that one is not closeable by code: 7-day windowing needs a cluster with a week of history.
+- **Codex status:** ⬜ awaiting review (validation only; no product code changed).
+
 ### #86 — 2026-07-08 — SECURITY: #85's hard-link guard silently did nothing on Windows (a shipped platform)
 - **Verified Codex's #85 first, independently.** Its finding is real and its fix works: a hard link is a regular file inside the repo *and* another name outside it, sharing one inode, so `Lstat` and `EvalSymlinks` are both blind to it and writing the repo path mutates the outside file. Reproduced the attack — refused, outside file byte-for-byte unchanged — and confirmed a plain manifest (`Nlink==1`) is still allowed, i.e. no false positive.
 - **Gap found while verifying:** `hardlink_other.go` (`//go:build !unix`) returned `false` unconditionally, so `hasMultipleHardLinks` **silently no-opped on every non-unix target — including Windows**, which `.goreleaser.yaml` ships (`windows/amd64`, `windows/arm64`) and whose NTFS supports hard links. The guard existed, compiled, and protected nobody on that platform. A security check that cannot check must refuse, not wave the write through.

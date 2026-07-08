@@ -17,15 +17,16 @@ Every planned code milestone is built, tested, graduated, and on `main`. `playgr
 - `kubeloop pr --open` → branches, commits the patched manifest, pushes, opens a **real pull request**.
   Local git half validated for real; the GitHub POST has never run.
 
-**The two unvalidated gaps — read these before trusting output:**
-1. **The GitHub POST's 201 success path has never run.** Everything around it is validated against the
-   real `api.github.com`: an invalid token returns a real 401 mapped to our message with no token leak,
-   and a read-only GET confirms `ParseOrigin` yields what GitHub accepts (`/repos/…/kubeloop-` → 200,
-   `…/kubeloop` → 404 — the trailing-dash bug is real). Creating an actual PR needs a `repo`-scoped
-   `GITHUB_TOKEN` and a *scratch* repo (not `kubeloop-` itself).
-2. **7-day windowing is unproven.** The live queries were validated on a minutes-old kind cluster, so
-   metric names, labels, and the pod selector are confirmed, but `[7d:5m]` behaviour is not. Needs a
-   cluster with a week of history.
+✅ **`pr --open` opened a real pull request** on a throwaway repo (#87): 1 commit, 1 file, +2/−2, base
+`main` untouched, closed and branch deleted afterwards. The GitHub path is proven end to end.
+
+**What is still unproven — read before trusting output:**
+1. **7-day windowing.** The live queries were validated on a minutes-old kind cluster, so metric names,
+   labels, and the pod selector are confirmed, but the `[7d:5m]` subquery shape never actually ran —
+   every workload was (correctly) excluded as "<7d of history". Needs a week-old cluster.
+2. **The Windows hard-link guard** (`internal/pr/openpr/hardlink_windows.go`) is compile-verified only;
+   it has never executed on Windows. It fails closed, so the worst case is a false refusal. Verify on
+   real Windows, or drop Windows from `.goreleaser.yaml` until you can.
 
 Codex reviewed everything (#82) and approved for a v1.0 code freeze. Since then #83 and #84 hardened
 **Codex's own fix** — it guarded symlinked leaves but not symlinked parent directories, and nothing
