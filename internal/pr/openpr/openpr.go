@@ -256,7 +256,13 @@ func patchTarget(root, rel string) (string, error) {
 	if !info.Mode().IsRegular() {
 		return "", fmt.Errorf("manifest path %q is not a regular file", rel)
 	}
-	if hasMultipleHardLinks(info) {
+	// Fail closed: if the link count cannot be determined, refuse. "I could not
+	// tell" must never be treated as "it is safe".
+	linked, err := hasMultipleHardLinks(full, info)
+	if err != nil {
+		return "", fmt.Errorf("manifest path %q: %w", rel, err)
+	}
+	if linked {
 		return "", fmt.Errorf("manifest path %q has multiple hard links; refusing to overwrite it", rel)
 	}
 	return full, nil

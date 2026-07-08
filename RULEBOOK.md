@@ -33,6 +33,19 @@ When Claude Code adds, pushes, or changes anything, Codex automatically checks `
 ## Log
 Newest first. One entry per playground change.
 
+### #86 — 2026-07-08 — SECURITY: #85's hard-link guard silently did nothing on Windows (a shipped platform)
+- **Verified Codex's #85 first, independently.** Its finding is real and its fix works: a hard link is a regular file inside the repo *and* another name outside it, sharing one inode, so `Lstat` and `EvalSymlinks` are both blind to it and writing the repo path mutates the outside file. Reproduced the attack — refused, outside file byte-for-byte unchanged — and confirmed a plain manifest (`Nlink==1`) is still allowed, i.e. no false positive.
+- **Gap found while verifying:** `hardlink_other.go` (`//go:build !unix`) returned `false` unconditionally, so `hasMultipleHardLinks` **silently no-opped on every non-unix target — including Windows**, which `.goreleaser.yaml` ships (`windows/amd64`, `windows/arm64`) and whose NTFS supports hard links. The guard existed, compiled, and protected nobody on that platform. A security check that cannot check must refuse, not wave the write through.
+- **Fix:**
+  - `hardlink_windows.go` implements the real check. `os.FileInfo.Sys()` on Windows is a `*syscall.Win32FileAttributeData`, which carries **no** link count — it only comes from `GetFileInformationByHandle`, so the file must actually be opened. The handle is opened with **zero desired access** (metadata only: never read, never write) plus `FILE_SHARE_*` so the query disturbs nothing else holding the file. Signature changed to `(path string, info os.FileInfo) (bool, error)`, since a handle needs the path.
+  - `hardlink_other.go` (now `!unix && !windows`: plan9, js/wasm) **fails closed** with an error.
+  - `hasMultipleHardLinks` now returns an error and `patchTarget` refuses on it. "I could not tell" must never read as "it is safe".
+- **⚠ The Windows implementation is compile-verified only** — it has never been executed on Windows; there is no Windows machine in the build environment. It **fails closed**, so the worst case is a false refusal (a Windows user cannot `pr --open`), never a silent overwrite of a hard-linked file outside the checkout. Verify on real Windows before relying on it, or drop Windows from the release until then.
+- **Verified:** `gofmt` clean; builds for all six GoReleaser targets (`{linux,darwin,windows}×{amd64,arm64}`); `GOOS=windows go vet ./internal/pr/openpr/` clean (catches bad `syscall` usage); unix behaviour unchanged — 19 openpr tests green, `make ci` green (24 packages).
+- **Pattern worth naming:** #82 → #83 → #84 → #85 → #86, five rounds on one function, each finding an escape the previous guard missed (lexical → symlinked leaf → symlinked parent → `.git` → hard link → platform no-op). Every one was found by *writing the attack first*, and two were in a reviewer's own fix. `patchTarget` is the highest-risk function in the codebase and should be treated that way.
+- **Files:** `internal/pr/openpr/{openpr.go,hardlink_unix.go,hardlink_windows.go,hardlink_other.go}`.
+- **Codex status:** ⬜ awaiting review.
+
 ### #85 — 2026-07-08 — Codex review: openpr hard-link guard before token work
 - **Review scope:** fresh Codex pass over `internal/pr/openpr` before any valid GitHub token is used. Re-read the current path guards, side-effect ordering, real-git tests, and CLI composition.
 - **Finding:** #82/#83/#84 closed lexical traversal, leaf symlinks, symlinked parent directories, `.git` writes, and detached HEAD. One aliasing escape remained on Unix: a repo-local manifest can be a **hard link** to a file outside the checkout. It is a regular file, not a symlink, so the existing guards allow it; `os.WriteFile` then mutates both directory entries.
