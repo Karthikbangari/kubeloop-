@@ -3,11 +3,28 @@
 // pod-matching rules are provable offline. promclient issues the strings;
 // promusage parses the answers.
 //
-// ⚠ NOT VALIDATED AGAINST A LIVE PROMETHEUS. Every query below is unit-tested
-// for exact output, but no one has yet run them against a real server with real
-// cadvisor metrics. They assume cadvisor/kubelet metric names
-// (container_cpu_usage_seconds_total, container_memory_working_set_bytes) and a
-// `pod` label. Treat the numbers as unverified until that check happens.
+// VALIDATED against a live Prometheus (kube-prometheus-stack on kind, k8s
+// v1.36, 2026-07-08). Confirmed on real data:
+//
+//   - The metric names exist and carry namespace/pod/container labels:
+//     container_cpu_usage_seconds_total, container_memory_working_set_bytes.
+//   - container!="" is load-bearing — it drops the per-pod cgroup rollup series
+//     (10 of 15 series in the test namespace) leaving exactly the real pods.
+//   - The kind-aware pod regex genuinely prevents the over-match: against real
+//     pod names, `checkout-api-.*` matched checkout-api-v2's pod, while
+//     `checkout-api-[a-z0-9]+-[a-z0-9]+` matched only checkout-api's two.
+//
+// Two things the live check corrected, which no unit test could have caught:
+//
+//   - HistoryDays measured the longest-lived *pod* rather than the workload.
+//     See its doc comment.
+//   - container!="POD" matches nothing on modern cadvisor, which no longer
+//     emits the pause container under that name. It is kept as a harmless guard
+//     for older clusters (k8s <1.16), not because it does anything today.
+//
+// Still unverified: 7-day windowing behaviour. A kind cluster is minutes old,
+// so the queries were exercised over short windows; the [7d:5m] shape returns
+// data only once a workload has lived across at least one aligned step.
 package promql
 
 import (
@@ -99,13 +116,27 @@ func MaxMemory(s Selector, r Range) string {
 // HistoryDays counts distinct days that carry data, as a proxy for "how long
 // has this workload been observed" — the input to safety's <7d exclusion.
 //
-// It is a proxy, not a truth: PromQL cannot cheaply report a series' age, so
-// this counts 1-day-step samples over the history window and saturates there
-// (a 200-day-old workload reports 30 with History="30d"). That is fine for a
-// rule that only asks "≥ 7?", and it fails safe — undercounting excludes a
-// workload rather than sizing it on thin data.
+// The pod label is aggregated away *before* counting, and this is the whole
+// point. The obvious formulation — max(count_over_time(sum by (pod) (…))) —
+// measures the longest-lived **pod**, not the workload. Pods are replaced on
+// every deploy, so a service that has run for a year but ships daily would have
+// no pod older than a day, report HistoryDays≈1, and be silently excluded as
+// "<7d of history". Teams that deploy often would see their whole cluster
+// vanish from the report. Dropping the pod label first counts the days on which
+// *any* pod of the workload existed, which is the workload's age.
+//
+// It remains a proxy: PromQL cannot cheaply report a series' age, so this counts
+// 1-day-step samples over the history window and saturates there (a 200-day-old
+// workload reports 30 with History="30d"). Fine for a rule that only asks "≥7?".
+//
+// It fails safe. Prometheus aligns subquery steps to absolute multiples of the
+// step, so a workload younger than one step lands between evaluation points and
+// the query returns *no data* — which clustersource maps to zero days, and
+// safety then excludes the workload rather than sizing it on thin data.
+// (Confirmed against a live Prometheus: a minutes-old workload yields an empty
+// result for a [30d:1d] subquery, because no midnight boundary has passed.)
 func HistoryDays(s Selector, r Range) string {
 	return fmt.Sprintf(
-		`max(count_over_time(sum by (pod) (container_cpu_usage_seconds_total{%s})[%s:1d]))`,
+		`count_over_time(sum(container_cpu_usage_seconds_total{%s})[%s:1d])`,
 		s.matchers(), r.History)
 }

@@ -125,8 +125,46 @@ func TestHistoryDays_UsesDailyStepOverHistoryWindow(t *testing.T) {
 	if !strings.Contains(got, "[30d:1d]") {
 		t.Errorf("HistoryDays should count daily steps over the history window: %s", got)
 	}
-	if !strings.HasPrefix(got, "max(count_over_time(") {
+	if !strings.HasPrefix(got, "count_over_time(") {
 		t.Errorf("HistoryDays should count samples: %s", got)
+	}
+}
+
+// Regression: HistoryDays must measure the WORKLOAD's age, not the longest-lived
+// pod's. Pods are replaced on every deploy, so `max(... sum by (pod) ...)` would
+// report ~1 day for a year-old service that ships daily, and safety would
+// silently exclude it as "<7d of history". Aggregating the pod label away first
+// counts the days on which any pod existed.
+func TestHistoryDays_AggregatesPodLabelAway(t *testing.T) {
+	sel, _ := WorkloadPods("Deployment", "shop", "checkout-api")
+	got := HistoryDays(sel, Defaults())
+	if strings.Contains(got, "by (pod)") {
+		t.Errorf("HistoryDays must not group by pod — that measures pod lifetime, not workload age: %s", got)
+	}
+	if strings.HasPrefix(got, "max(") {
+		t.Errorf("HistoryDays must not take max across pods: %s", got)
+	}
+	want := `count_over_time(sum(container_cpu_usage_seconds_total{` +
+		`namespace="shop",pod=~"checkout-api-[a-z0-9]+-[a-z0-9]+",container!="",container!="POD"})[30d:1d])`
+	if got != want {
+		t.Errorf("HistoryDays =\n  %s\nwant\n  %s", got, want)
+	}
+}
+
+// CPU and memory, unlike history, are correctly per-pod: a request is sized per
+// pod, so the busiest pod is the one that matters.
+func TestUsageQueries_AreStillPerPodThenMaxed(t *testing.T) {
+	sel, _ := WorkloadPods("Deployment", "shop", "checkout-api")
+	for name, q := range map[string]string{
+		"CPUQuantile": CPUQuantile(sel, 0.95, Defaults()),
+		"MaxMemory":   MaxMemory(sel, Defaults()),
+	} {
+		if !strings.Contains(q, "sum by (pod)") {
+			t.Errorf("%s must aggregate per pod: %s", name, q)
+		}
+		if !strings.HasPrefix(q, "max(") {
+			t.Errorf("%s must take the busiest pod: %s", name, q)
+		}
 	}
 }
 
