@@ -197,7 +197,7 @@ func safeJoin(root, rel string) (string, error) {
 // patchTarget returns the regular file to overwrite.
 //
 // safeJoin only rules out *lexical* traversal, and os.WriteFile follows
-// symlinks, so two escapes remain and both are closed here:
+// symlinks, so filesystem aliases need their own checks:
 //
 //   - the leaf is a symlink: "deploy.yaml" -> /etc/passwd. Caught by Lstat,
 //     which does not follow the link.
@@ -205,6 +205,8 @@ func safeJoin(root, rel string) (string, error) {
 //     is lexically inside the repo and its leaf is a genuine regular file.
 //     Lstat on the leaf sees nothing wrong. Only resolving the parent
 //     directory's symlinks and re-checking containment catches this.
+//   - a hard-linked manifest is a regular file inside the repo and another
+//     path outside it. Writing the repo path mutates both names.
 //
 // Both are refused before any branch/commit/push/PR happens, so a hostile
 // manifest path cannot make kubeloop write outside the checkout it was given.
@@ -253,6 +255,9 @@ func patchTarget(root, rel string) (string, error) {
 	}
 	if !info.Mode().IsRegular() {
 		return "", fmt.Errorf("manifest path %q is not a regular file", rel)
+	}
+	if hasMultipleHardLinks(info) {
+		return "", fmt.Errorf("manifest path %q has multiple hard links; refusing to overwrite it", rel)
 	}
 	return full, nil
 }

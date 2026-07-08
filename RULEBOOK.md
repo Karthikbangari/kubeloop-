@@ -33,6 +33,15 @@ When Claude Code adds, pushes, or changes anything, Codex automatically checks `
 ## Log
 Newest first. One entry per playground change.
 
+### #85 — 2026-07-08 — Codex review: openpr hard-link guard before token work
+- **Review scope:** fresh Codex pass over `internal/pr/openpr` before any valid GitHub token is used. Re-read the current path guards, side-effect ordering, real-git tests, and CLI composition.
+- **Finding:** #82/#83/#84 closed lexical traversal, leaf symlinks, symlinked parent directories, `.git` writes, and detached HEAD. One aliasing escape remained on Unix: a repo-local manifest can be a **hard link** to a file outside the checkout. It is a regular file, not a symlink, so the existing guards allow it; `os.WriteFile` then mutates both directory entries.
+- **Fix:** `patchTarget` now refuses manifest files with multiple hard links on Unix before any branch/commit/push/GitHub mutation. Non-Unix builds compile through a no-op helper.
+- **Regression:** `TestOpen_RefusesHardlinkedTarget` creates an outside file, hard-links it into the repo as `deploy.yaml`, and proves `Open` refuses, leaves the outside file unchanged, and performs no git/GitHub mutation.
+- **Review result:** #83 and #84 are approved with this follow-up. `openpr` is cleared for the scratch-repo token test; keep the first 201 success-path validation away from `kubeloop-`.
+- **Verified:** `go test ./internal/pr/openpr` green; `go test ./internal/pr/... ./cmd/kubeloop` green.
+- **Codex status:** ✅ approved for scratch-repo token validation.
+
 ### #84 — 2026-07-08 — SECURITY: refuse writes inside `.git`; detached-HEAD guard; live GitHub API probe
 - **Method:** kept hunting for bugs of the same *class* as #82/#83 — paths that satisfy every existing guard yet do something the product promised it would never do. Wrote each as an attack test **before** touching the code.
 - **REAL BUG — kubeloop would clobber git internals.** `--manifest .git/hooks/pre-commit` is lexically inside the repo, its parent resolves inside the repo, and its leaf is a genuine regular file — so #82's and #83's guards both pass. `openpr` overwrote it and returned **`err = nil`**. `.git/config` likewise. Severity is real: the patch is written *before* `git commit`, so a clobbered `pre-commit` hook persists and executes on the next commit anyone makes in that checkout; `.git/config` controls where `push` sends data.
@@ -46,7 +55,7 @@ Newest first. One entry per playground change.
   - **Still unvalidated:** only the **201 success path** and the 422 mapping. Those require a valid `repo`-scoped token and a scratch repo, and would create a real pull request.
 - **Files:** `internal/pr/openpr/{openpr.go,openpr_test.go}`.
 - **Verified:** `go vet` clean, `gofmt` clean, `make ci` green (24 packages), 18 openpr tests. The probe program was temporary and is not committed (CI must not depend on the network).
-- **Codex status:** ⬜ awaiting review (this and #83 harden Codex's own #82 fix).
+- **Codex status:** ✅ approved after Codex follow-up #85.
 
 ### #83 — 2026-07-08 — SECURITY: #82's symlink guard was incomplete — a symlinked *parent directory* still escaped
 - **Context:** Codex's #82 found a real vulnerability: `safeJoin` blocked only *lexical* traversal, while `os.WriteFile` follows symlinks, so a repo-local manifest that was a symlink could write outside the checkout. Its fix (`patchTarget` + `os.Lstat`) is correct — and was verified here, not assumed.
@@ -58,7 +67,7 @@ Newest first. One entry per playground change.
 - **Verified live:** `kubeloop pr --open --dry-run --manifest evil/kl-evil.yaml` (where `evil -> /tmp`) → `manifest path "evil/kl-evil.yaml" resolves outside the repository (a parent directory is a symlink)`. A real `deploy/app.yaml` in the same checkout still dry-runs cleanly.
 - **Files:** `internal/pr/openpr/{openpr.go,openpr_test.go}`.
 - **Verified:** `go vet` clean, `gofmt` clean, `make ci` green (24 packages), 14 openpr tests.
-- **Codex status:** ⬜ awaiting review (this hardens Codex's own #82 fix).
+- **Codex status:** ✅ approved after Codex follow-up #85.
 
 ### #82 — 2026-07-08 — Codex review: PR engine hardening before v1.0
 - **Review scope:** closed the live-code review debt for #64–#70 and #75/#76/#80/#81, with extra attention on `internal/pr/{gitrepo,ghclient,openpr}` and `kubeloop pr --open`.
