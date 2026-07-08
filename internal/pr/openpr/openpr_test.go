@@ -18,6 +18,7 @@ type fakeGit struct {
 	origErr error
 	pushErr error
 	branch  string
+	head    string // "" -> "main"
 }
 
 func (f *fakeGit) IsClean(context.Context) (bool, error) {
@@ -33,6 +34,9 @@ func (f *fakeGit) OriginRepo(context.Context) (string, string, error) {
 }
 func (f *fakeGit) CurrentBranch(context.Context) (string, error) {
 	f.steps = append(f.steps, "current")
+	if f.head != "" {
+		return f.head, nil
+	}
 	return "main", nil
 }
 func (f *fakeGit) CreateBranch(_ context.Context, b string) error {
@@ -349,5 +353,109 @@ func TestOpen_AllowsRealSubdirectory(t *testing.T) {
 	got, _ := os.ReadFile(filepath.Join(repo, rel))
 	if string(got) != "cpu: 576m\n" {
 		t.Errorf("patch not applied: %q", got)
+	}
+}
+
+// Nothing may be written inside .git. The path is lexically inside the repo and
+// the leaf is a regular file, so the traversal and symlink guards both pass —
+// but the patch is written before the commit, so a clobbered pre-commit hook
+// would then execute, and .git/config controls where `push` sends data.
+func TestOpen_RefusesWriteInsideGitDir(t *testing.T) {
+	for _, rel := range []string{
+		filepath.Join(".git", "hooks", "pre-commit"),
+		filepath.Join(".git", "config"),
+		filepath.Join("sub", ".git", "config"),
+		filepath.Join(".GIT", "config"), // macOS/Windows are case-insensitive
+	} {
+		repo := t.TempDir()
+		target := filepath.Join(repo, rel)
+		if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(target, []byte("ORIGINAL\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		g, c := &fakeGit{}, &fakeGH{}
+		_, err := Open(context.Background(), g, c, Request{
+			Prepared: pr.Prepared{Path: rel, Content: []byte("PWNED\n"), Title: "t", Body: "b"},
+			RepoDir:  repo, Ref: pr.Ref{Namespace: "shop", Name: "x"},
+		})
+		if err == nil || !strings.Contains(err.Error(), "git directory") {
+			t.Errorf("%s: want a git-directory refusal, got %v", rel, err)
+		}
+		if got, _ := os.ReadFile(target); string(got) != "ORIGINAL\n" {
+			t.Errorf("%s: CLOBBERED git internals: %q", rel, got)
+		}
+		if c.n != 0 {
+			t.Errorf("%s: must not call GitHub", rel)
+		}
+		for _, s := range g.steps {
+			if strings.HasPrefix(s, "branch:") || strings.HasPrefix(s, "commit:") || strings.HasPrefix(s, "push:") {
+				t.Errorf("%s: mutated git before refusing: %v", rel, g.steps)
+			}
+		}
+	}
+}
+
+// The .git guard must match a path segment, not a substring: these are ordinary
+// files with legitimate names.
+func TestOpen_AllowsGitLikeFilenames(t *testing.T) {
+	for _, rel := range []string{".gitignore", "deploy/.gitkeep", "gitops/app.yaml"} {
+		repo := t.TempDir()
+		target := filepath.Join(repo, filepath.FromSlash(rel))
+		if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(target, []byte("cpu: 2000m\n"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		_, err := Open(context.Background(), &fakeGit{}, &fakeGH{}, Request{
+			Prepared: pr.Prepared{Path: filepath.FromSlash(rel), Content: []byte("cpu: 576m\n"), Title: "t", Body: "b"},
+			RepoDir:  repo, Ref: pr.Ref{Namespace: "shop", Name: "x"},
+		})
+		if err != nil {
+			t.Errorf("%s must be allowed, got %v", rel, err)
+		}
+	}
+}
+
+// A detached HEAD reports the literal "HEAD" as the current branch. Opening a
+// PR onto "HEAD" would 422 only after the branch was already pushed.
+func TestOpen_RefusesDetachedHead(t *testing.T) {
+	g := &fakeGit{head: "HEAD"}
+	c := &fakeGH{}
+	_, err := Open(context.Background(), g, c, request(t))
+	if err == nil || !strings.Contains(err.Error(), "detached HEAD") {
+		t.Fatalf("want a detached-HEAD refusal, got %v", err)
+	}
+	if c.n != 0 {
+		t.Error("must not call GitHub")
+	}
+	for _, s := range g.steps {
+		if strings.HasPrefix(s, "push:") {
+			t.Errorf("pushed despite detached HEAD: %v", g.steps)
+		}
+	}
+}
+
+// The patched write must not widen a private manifest's permissions.
+func TestOpen_PreservesFileMode(t *testing.T) {
+	repo := t.TempDir()
+	p := filepath.Join(repo, "deploy.yaml")
+	if err := os.WriteFile(p, []byte("cpu: 2000m\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Open(context.Background(), &fakeGit{}, &fakeGH{}, Request{
+		Prepared: pr.Prepared{Path: "deploy.yaml", Content: []byte("cpu: 576m\n"), Title: "t", Body: "b"},
+		RepoDir:  repo, Ref: pr.Ref{Namespace: "shop", Name: "x"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	fi, err := os.Stat(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if fi.Mode().Perm() != 0o600 {
+		t.Errorf("manifest mode widened 0600 -> %v", fi.Mode().Perm())
 	}
 }

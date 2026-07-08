@@ -80,6 +80,12 @@ func Open(ctx context.Context, g Git, c PRCreator, req Request) (Result, error) 
 			return Result{}, err
 		}
 	}
+	// In a detached HEAD, `rev-parse --abbrev-ref HEAD` reports the literal
+	// "HEAD". Opening a PR against a branch named HEAD would 422 from GitHub
+	// after the branch was already pushed; say so before anything is mutated.
+	if base == "HEAD" {
+		return Result{}, fmt.Errorf("repository is in a detached HEAD state: pass --base with the target branch")
+	}
 	branch := req.Branch
 	if branch == "" {
 		branch = BranchName(req.Ref, req.Prepared.Content)
@@ -206,6 +212,17 @@ func patchTarget(root, rel string) (string, error) {
 	full, err := safeJoin(root, rel)
 	if err != nil {
 		return "", err
+	}
+	// Never write inside .git. The path is lexically inside the repo and the
+	// leaf is a regular file, so the checks below would happily allow it — but
+	// the patch is written *before* the commit, so a clobbered
+	// .git/hooks/pre-commit would then execute, and .git/config controls where
+	// `push` sends data. Compared case-insensitively because macOS and Windows
+	// filesystems (and git itself) treat ".GIT" as the git directory.
+	for _, seg := range strings.Split(filepath.ToSlash(filepath.Clean(rel)), "/") {
+		if strings.EqualFold(seg, ".git") {
+			return "", fmt.Errorf("manifest path %q is inside the git directory; refusing to write there", rel)
+		}
 	}
 	// Resolve the root too: on macOS a temp dir under /var is itself reached
 	// through a /var -> /private/var symlink, so comparing an unresolved root

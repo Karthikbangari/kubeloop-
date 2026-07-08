@@ -18,13 +18,19 @@ Every planned code milestone is built, tested, graduated, and on `main`. `playgr
   Local git half validated for real; the GitHub POST has never run.
 
 **The two unvalidated gaps — read these before trusting output:**
-1. **The GitHub POST has never reached github.com.** `internal/pr/ghclient` is httptest-only. Needs a
-   `repo`-scoped `GITHUB_TOKEN` and a *scratch* repo (not `kubeloop-` itself) to prove.
+1. **The GitHub POST's 201 success path has never run.** Everything around it is validated against the
+   real `api.github.com`: an invalid token returns a real 401 mapped to our message with no token leak,
+   and a read-only GET confirms `ParseOrigin` yields what GitHub accepts (`/repos/…/kubeloop-` → 200,
+   `…/kubeloop` → 404 — the trailing-dash bug is real). Creating an actual PR needs a `repo`-scoped
+   `GITHUB_TOKEN` and a *scratch* repo (not `kubeloop-` itself).
 2. **7-day windowing is unproven.** The live queries were validated on a minutes-old kind cluster, so
    metric names, labels, and the pod selector are confirmed, but `[7d:5m]` behaviour is not. Needs a
    cluster with a week of history.
 
-Also: RULEBOOK entries **#64–#70, #75, #76, #80, #81** are live code that Codex has not reviewed.
+Codex reviewed everything (#82) and approved for a v1.0 code freeze. Since then #83 and #84 hardened
+**Codex's own fix** — it guarded symlinked leaves but not symlinked parent directories, and nothing
+stopped `--manifest .git/hooks/pre-commit` from clobbering git internals. Both are fixed with
+regression tests; **both are themselves unreviewed**, as is the `--from-cluster` CLI wiring (#79).
 
 ## What still works offline
 

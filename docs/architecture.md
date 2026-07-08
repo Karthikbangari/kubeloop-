@@ -96,9 +96,23 @@ branch, one commit, one push, one PR.
 - `internal/pr/openpr` — the composer. Resolves `origin` before mutating anything; refuses a dirty tree; refuses paths escaping the checkout; pushes before asking GitHub, and reports the pushed branch if the PR call then fails.
 - `--dry-run` performs none of it.
 
+### What `pr --open` refuses to do
+Each of these is a regression test, and each was found by writing the attack first:
+
+- write outside the checkout — lexically (`../x`), through a **symlinked leaf**, or through a **symlinked parent directory**
+- write anywhere inside **`.git`** (matched by path segment, case-insensitively): the patch lands before the commit, so a clobbered `pre-commit` hook would execute
+- run on a **dirty working tree**, or in a **detached HEAD**
+- `git add .` / `commit -a` — only the one patched file is staged
+- push to the **base branch**, or open a PR from a branch onto itself
+- open a PR that changes nothing
+
 ## Not validated yet
 - **7-day windowing** in the live read-layer — needs a cluster with a week of history.
-- **The GitHub POST** — needs a `repo`-scoped token and a target repository.
+- **The GitHub POST's 201 success path.** The rest is validated against the real
+  `api.github.com`: an invalid token returns a real 401 that maps to our message
+  with no token leak, and a read-only GET confirms `ParseOrigin`'s output is what
+  GitHub accepts (`/repos/Karthikbangari/kubeloop-` → 200; `…/kubeloop` → 404).
+  Creating an actual pull request needs a `repo`-scoped token and a scratch repo.
 - **PR engine tail**: Helm/Kustomize rendered-to-source mapping and GitHub PR creation. The offline raw-YAML locator, patcher, composer, prepare, and guards exist in `internal/pr`.
 - **Hosted tier**: continuous scans, policy-gated auto-PRs, verified-savings ledger.
 
