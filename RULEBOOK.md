@@ -33,6 +33,25 @@ When Claude Code adds, pushes, or changes anything, Codex automatically checks `
 ## Log
 Newest first. One entry per playground change.
 
+### #79 — 2026-07-08 — GRADUATE the live reader (slices 29–31) + ship `--from-cluster`
+- **Gate:** Codex reviewed and **approved** the live read-layer slices in #78, conditional on carrying its non-finite-sample fix. **Condition verified, not assumed:** that fix lives in `internal/readlayer/promusage`, which the graduated `clustersource` depends on; a `NaN` sample from a fake Prometheus aborts the live path with `sample value "NaN" not finite` rather than becoming plausible usage. First graduation in a while that passed the gate as designed rather than by user override.
+- **What:** `playground/slice-{29,30,31}-*` → `internal/readlayer/{kubeclient,promql,clustersource}` via `git mv` (history preserved). Only the cross-slice import path changed; the tests needed no edits. `playground/` now holds only the two PR-engine slices.
+- **Feature:** `kubeloop scan --from-cluster --prometheus URL [--namespace NS] [--context CTX]` — workloads via read-only `kubectl get`, usage from Prometheus, waste ranked in dollars. Read-only end to end.
+- **Flag discipline:** exactly one of `--from-file` / `--from-manifests` / `--from-cluster`. Flags belonging to one source are **rejected on another** rather than silently ignored (`--usage-file` with `--from-cluster` → "…reads usage from Prometheus"; `--prometheus`/`--namespace`/`--context` on an offline source → "applies to --from-cluster"). A quietly-dropped flag would confirm a wrong mental model. `--from-cluster` without `--prometheus` fails before shelling out to kubectl.
+- **UX bug found only by running it:** a transport failure printed Go's `*url.Error`, which embeds the full request URL — and a real PromQL query percent-encodes into hundreds of characters, so `connection refused` drowned in a wall of `%28%29%7B`. `promclient` now reports the base URL and the underlying cause: `prometheus request to http://localhost:9999: dial tcp …: connection refused`. A test pins that the encoded query never leaks into the error. Invisible until the queries got long — the offline tests all used the query string `"q"`.
+- **Verified live against the #77 kind cluster, not just unit tests:**
+  - `--from-cluster` listed all 5 workloads (Deployments + StatefulSet) and rendered a report, text and `--json`.
+  - Prometheus **down** → exit 1 naming the workload and the cause. It does **not** print `$0.00 waste`, which would read as "nothing to save".
+  - Bad `--context` → kubectl's own error surfaced ("context was not found").
+  - Empty namespace → "no Deployments or StatefulSets found", not `$0.00`.
+  - `--namespace --` → refused ("must not begin with '-'"): the flag-injection guard firing for real.
+  - Every workload correctly **excluded** — pause-image ones as "no measured CPU usage", CPU burners as "only 0d usage history (<7d)". The cluster is an hour old. No dollar figure was produced and none was faked.
+  - `busy` moved from "no measured CPU" to "0d history" as the cluster aged past one 5m-aligned subquery step, confirming the alignment behaviour documented in #73.
+- **Files:** moved `playground/slice-{29,30,31}-*/` → `internal/readlayer/{kubeclient,promql,clustersource}/`; `internal/readlayer/promclient/{promclient.go,promclient_test.go}`; `cmd/kubeloop/{main.go,main_test.go}` (`source` struct + `--from-cluster`); docs: `README.md`, `docs/architecture.md`, `playground/README.md`.
+- **Verified:** `go vet` clean, `gofmt` clean, `make ci` green (23 packages). 6 new CLI tests + 1 promclient regression test.
+- **Still gated:** 7-day windowing (needs a week-old cluster); real GitHub PR creation (needs a token).
+- **Codex status:** ⬜ awaiting review of the CLI wiring (the graduated slices themselves were approved in #78).
+
 ### #78 — 2026-07-08 — Codex review: reject non-finite Prometheus samples before sizing
 - **Finding:** `promusage.Scalar` accepted Prometheus sample strings `NaN`, `+Inf`, and `-Inf` because `strconv.ParseFloat` treats them as valid floats. Those non-finite values then flowed into `promusage.AssembleUsage`, where float-to-int conversion could turn a bad Prometheus sample into plausible-looking usage instead of aborting the live read-layer.
 - **Fix:** `Scalar` now rejects non-finite parsed values with an error. That preserves the existing safety contract: no data is `ok=false` and becomes an exclusion with a reason; malformed or nonsensical data is an error and aborts collection.
@@ -86,7 +105,7 @@ Newest first. One entry per playground change.
 - **Also:** an unknown kind (kubeclient listing something `promql` has no pod-naming rule for) is an error, not a guess — it would mean the two packages disagree.
 - **Files:** `playground/slice-31-clustersource/{clustersource.go,clustersource_test.go}` (imports internal `kubeparse`/`manifestsource`/`promusage`/`promclient`/`scan` + sibling slice-30; graduates with the live-reader group).
 - **Verified:** `go vet` clean, `gofmt` clean, tests green. A compile-time `var _ Querier = (*promclient.Client)(nil)` proves the real client satisfies the seam. `TestCollect_EndToEndWithRealPromClient` drives promql → **real promclient** → promusage → clustersource → `scan.Scan` over `httptest`, asserting proposed CPU 576m (P99 0.48 cores ×1.2). Plus: no-data→exclusion-with-reason, query-error→abort naming the workload, unknown-kind→error, and all 4 queries namespace+pod scoped.
-- **Codex status:** ⬜ awaiting review.
+- **Codex status:** ✅ approved in #78 (conditional on the non-finite-sample fix, which the #79 graduation carries).
 
 ### #73 — 2026-07-08 — build slice: PromQL query strings (slice-30, live read-layer)
 - **What:** `promql` builds the four query strings (`CPUQuantile` at 0.95/0.99, `MaxMemory`, `HistoryDays`) plus `WorkloadPods` (kind-aware pod selector) and label-value escaping. Pure string construction, no I/O. Fills the gap `promusage`'s doc comment reserved ("building the PromQL query strings is a separate slice").
@@ -95,7 +114,7 @@ Newest first. One entry per playground change.
 - **⚠ superseded by #77** — validated against a live Prometheus, which found a real bug (`HistoryDays` measured pod lifetime, not workload age). See #77.
 - **Files:** `playground/slice-30-promql/{promql.go,promql_test.go}`.
 - **Verified:** `go vet` clean, tests green — and the over-match claim is *proved*, not asserted: the test compiles the regex with Prometheus's implicit anchoring (`^(?:…)$`) and checks it matches `checkout-api-6d4f8b9c7-abc12` while rejecting `checkout-api-v2-6d4f8b9c7-abc12`. Also exact-string tests for all three queries, escaping, and quantile formatting (`0.99`, not `9.9e-01`).
-- **Codex status:** ⬜ awaiting review.
+- **Codex status:** ✅ approved in #78 (conditional on the non-finite-sample fix, which the #79 graduation carries).
 
 ### #72 — 2026-07-08 — build slice: live kube workload lister via kubectl (slice-29, live read-layer)
 - **Decision (user-made):** talk to the kube API by **shelling out to `kubectl get -o json`**, not client-go. `kubeparse` already consumes exactly that output, and kubectl inherits the user's kubeconfig auth — including the EKS/GKE/AKS exec credential plugins that are the hard, security-sensitive part of reaching a real cluster. Keeps the project on its single dependency (yaml.v3) instead of pulling in client-go's tree. Cost: kubectl must be on PATH, and a future *hosted* scanner will need a real in-process client.
@@ -106,7 +125,7 @@ Newest first. One entry per playground change.
 - **Files:** `playground/slice-29-kubeclient/{kubeclient.go,kubeclient_test.go}` (imports internal `kubeparse`; graduates with the live-reader group).
 - **Verified:** `go vet` clean, tests green (kind-filling, all-namespaces default, `-n`/`--context` scoping, flag-injection refusal, empty-cluster-is-not-an-error, kubectl-error surfacing, malformed JSON, malformed quantity). Additionally smoke-tested the **real** `ExecRunner` against the installed kubectl v1.34.1 with no cluster: it built `kubectl get deployments -o json --all-namespaces`, kubectl accepted the flags, and the failure surfaced loudly with kubectl's own stderr rather than returning zero workloads (which would have printed `$0 waste`). That temp test was not committed.
 - **~~Still unproven~~ → proven in #77:** real kubectl against a real kind cluster listed all Deployments + the StatefulSet with correct kinds, replicas, and parsed requests. The fixtures matched reality.
-- **Codex status:** ⬜ awaiting review.
+- **Codex status:** ✅ approved in #78 (conditional on the non-finite-sample fix, which the #79 graduation carries).
 
 ### #71 — 2026-07-08 — GRADUATE the read-layer (slices 24–28) + ship `--from-manifests`
 - **Process note (read this):** the RULEBOOK's rule 3 says nothing leaves `playground/` until **Codex** approves. No Codex had run against slices 24–28 (#58–#63 all sat at ⬜) at the time of graduation; **the user explicitly overrode the gate** and directed Claude to review and graduate, so the graduation itself carried a *Claude* review. Codex has since reviewed and approved (user-reported, 2026-07-08), which retroactively closes the gate on the read-layer code in #58–#63.

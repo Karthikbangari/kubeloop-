@@ -194,7 +194,7 @@ func TestRun_FromManifests(t *testing.T) {
 func TestRun_FromManifestsRejectsBothSources(t *testing.T) {
 	dir, usage := manifestDir(t)
 	err := Run([]string{"--from-file", sampleFile(t), "--from-manifests", dir, "--usage-file", usage}, &bytes.Buffer{})
-	if err == nil || !strings.Contains(err.Error(), "not both") {
+	if err == nil || !strings.Contains(err.Error(), "exactly one of") {
 		t.Fatalf("want mutually-exclusive-source error, got %v", err)
 	}
 }
@@ -225,6 +225,56 @@ func TestRun_UsageFileRejectedWithFromFile(t *testing.T) {
 	err := Run([]string{"--from-file", sampleFile(t), "--usage-file", usage}, &bytes.Buffer{})
 	if err == nil || !strings.Contains(err.Error(), "--usage-file applies to --from-manifests") {
 		t.Fatalf("want usage-file misuse error, got %v", err)
+	}
+}
+
+// --from-cluster without a Prometheus URL cannot measure usage. Fail before
+// shelling out to kubectl, not after.
+func TestRun_FromClusterRequiresPrometheus(t *testing.T) {
+	err := Run([]string{"scan", "--from-cluster"}, &bytes.Buffer{})
+	if err == nil || !strings.Contains(err.Error(), "--prometheus is required") {
+		t.Fatalf("want a prometheus-required error, got %v", err)
+	}
+}
+
+func TestRun_FromClusterRejectsUsageFile(t *testing.T) {
+	_, usage := manifestDir(t)
+	err := Run([]string{"scan", "--from-cluster", "--prometheus", "http://x:9090", "--usage-file", usage}, &bytes.Buffer{})
+	if err == nil || !strings.Contains(err.Error(), "reads usage from Prometheus") {
+		t.Fatalf("want usage-file misuse error, got %v", err)
+	}
+}
+
+func TestRun_RejectsThreeSourcesAtOnce(t *testing.T) {
+	dir, _ := manifestDir(t)
+	err := Run([]string{"--from-file", sampleFile(t), "--from-manifests", dir, "--from-cluster"}, &bytes.Buffer{})
+	if err == nil || !strings.Contains(err.Error(), "exactly one of") {
+		t.Fatalf("want mutually-exclusive-source error, got %v", err)
+	}
+}
+
+// Cluster-only flags on an offline source are a wrong mental model. Say so
+// rather than silently ignoring them.
+func TestRun_ClusterFlagsRejectedOnOfflineSources(t *testing.T) {
+	dir, _ := manifestDir(t)
+	cases := [][]string{
+		{"--from-file", sampleFile(t), "--prometheus", "http://x:9090"},
+		{"--from-file", sampleFile(t), "--context", "prod"},
+		{"--from-manifests", dir, "--namespace", "shop"},
+		{"--from-manifests", dir, "--prometheus", "http://x:9090"},
+	}
+	for _, args := range cases {
+		err := Run(args, &bytes.Buffer{})
+		if err == nil || !strings.Contains(err.Error(), "applies to --from-cluster") {
+			t.Errorf("args %v: want cluster-flag misuse error, got %v", args, err)
+		}
+	}
+}
+
+func TestRun_NoSourceIsAnError(t *testing.T) {
+	err := Run([]string{"scan"}, &bytes.Buffer{})
+	if err == nil || !strings.Contains(err.Error(), "is required") {
+		t.Fatalf("want a source-required error, got %v", err)
 	}
 }
 

@@ -13,9 +13,9 @@ import (
 
 	"github.com/kubeloop/kubeloop/internal/readlayer/kubeparse"
 	"github.com/kubeloop/kubeloop/internal/readlayer/manifestsource"
+	"github.com/kubeloop/kubeloop/internal/readlayer/promql"
 	"github.com/kubeloop/kubeloop/internal/readlayer/promusage"
 	"github.com/kubeloop/kubeloop/internal/scan"
-	promql "github.com/kubeloop/kubeloop/playground/slice-30-promql"
 )
 
 // Querier issues one Prometheus instant query. promclient.Client implements it.

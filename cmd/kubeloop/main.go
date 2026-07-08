@@ -1,24 +1,32 @@
 // Command kubeloop is the read-only Kubernetes rightsizing CLI. It scans
 // workloads, ranks their waste in dollars, and prints a report (text or JSON).
 // Read-only always: the only write path in the product is a human-reviewed PR,
-// which this binary never performs. The live read-layer (kubeconfig +
-// Prometheus) is a later slice; today workloads come from --from-file (scan
-// inputs) or --from-manifests + --usage-file (raw Kubernetes manifests paired
-// with a usage export).
+// which this binary never performs. Workloads come from exactly one source:
+//
+//	--from-cluster    the live cluster (kubectl `get`, read-only) + Prometheus
+//	--from-manifests  a directory of Kubernetes manifests + a usage export
+//	--from-file       pre-assembled scan inputs (offline)
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"flag"
 	"fmt"
 	"io"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	pr "github.com/kubeloop/kubeloop/internal/pr"
 	"github.com/kubeloop/kubeloop/internal/pr/quantity"
+	"github.com/kubeloop/kubeloop/internal/readlayer/clustersource"
 	"github.com/kubeloop/kubeloop/internal/readlayer/dirsource"
+	"github.com/kubeloop/kubeloop/internal/readlayer/kubeclient"
+	"github.com/kubeloop/kubeloop/internal/readlayer/promclient"
+	"github.com/kubeloop/kubeloop/internal/readlayer/promql"
 	rp "github.com/kubeloop/kubeloop/internal/reporting"
 	rs "github.com/kubeloop/kubeloop/internal/rightsizing"
 	"github.com/kubeloop/kubeloop/internal/savings"
@@ -60,15 +68,22 @@ func runScan(args []string, out io.Writer) error {
 	fs.SetOutput(out)
 	jsonOut := fs.Bool("json", false, "machine-readable JSON output")
 	cloud := fs.String("cloud", "aws", "cloud for list pricing (aws|gcp|azure)")
-	fromFile := fs.String("from-file", "", "read workloads from a JSON file (offline; cluster read-layer TBD)")
-	fromManifests := fs.String("from-manifests", "", "read workloads from a directory of Kubernetes manifest JSON files (offline)")
-	usageFile := fs.String("usage-file", "", "JSON map of \"namespace/name\" -> {P95CPU,P99CPU,MaxMem,HistoryDays}, paired with --from-manifests")
+	var src source
+	fs.StringVar(&src.fromFile, "from-file", "", "read workloads from a JSON file (offline)")
+	fs.StringVar(&src.fromManifests, "from-manifests", "", "read workloads from a directory of Kubernetes manifest JSON files (offline)")
+	fs.StringVar(&src.usageFile, "usage-file", "", "JSON map of \"namespace/name\" -> {P95CPU,P99CPU,MaxMem,HistoryDays}, paired with --from-manifests")
+	fs.BoolVar(&src.fromCluster, "from-cluster", false, "read workloads from the live cluster via kubectl, and usage from Prometheus (read-only)")
+	fs.StringVar(&src.prometheus, "prometheus", "", "Prometheus base URL (e.g. http://localhost:9090), required with --from-cluster")
+	fs.StringVar(&src.namespace, "namespace", "", "limit --from-cluster to one namespace (default: all namespaces)")
+	fs.StringVar(&src.kubeContext, "context", "", "kubeconfig context for --from-cluster (default: current context)")
 	pricingFile := fs.String("pricing-file", "", "override list prices from a pricing.json file")
 	perRequest := fs.Bool("per-request", false, "cluster bills per pod request (e.g. GKE Autopilot): savings are immediate")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
-	inputs, err := loadWorkloads(*fromFile, *fromManifests, *usageFile)
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+	inputs, err := loadWorkloads(ctx, src)
 	if err != nil {
 		return err
 	}
@@ -208,24 +223,90 @@ func loadInputs(path string) ([]scan.Input, error) {
 	return inputs, nil
 }
 
-// loadWorkloads selects the offline input source: a single scan-input JSON file
-// (--from-file) or a directory of raw Kubernetes manifests paired with a usage
-// export (--from-manifests + --usage-file). Exactly one source is required; the
-// cluster read-layer is a later slice.
-func loadWorkloads(fromFile, fromManifests, usageFile string) ([]scan.Input, error) {
+// source is the workload input selection: exactly one of --from-file,
+// --from-manifests, or --from-cluster.
+type source struct {
+	fromFile      string
+	fromManifests string
+	usageFile     string
+	fromCluster   bool
+	prometheus    string
+	namespace     string
+	kubeContext   string
+}
+
+// loadWorkloads selects the input source. Exactly one is required, and the
+// flags that belong to one source are rejected on another rather than silently
+// ignored — a user who passes --usage-file with --from-cluster has a wrong
+// mental model, and a quietly-dropped flag would confirm it.
+func loadWorkloads(ctx context.Context, s source) ([]scan.Input, error) {
+	n := 0
+	for _, chosen := range []bool{s.fromFile != "", s.fromManifests != "", s.fromCluster} {
+		if chosen {
+			n++
+		}
+	}
+	if n > 1 {
+		return nil, fmt.Errorf("use exactly one of --from-file, --from-manifests, or --from-cluster")
+	}
 	switch {
-	case fromFile != "" && fromManifests != "":
-		return nil, fmt.Errorf("use either --from-file or --from-manifests, not both")
-	case fromManifests != "":
-		return loadManifestDir(fromManifests, usageFile)
-	case fromFile != "":
-		if usageFile != "" {
+	case s.fromCluster:
+		if s.usageFile != "" {
+			return nil, fmt.Errorf("--usage-file applies to --from-manifests; --from-cluster reads usage from Prometheus")
+		}
+		return loadCluster(ctx, s)
+	case s.fromManifests != "":
+		if err := s.rejectClusterFlags("--from-manifests"); err != nil {
+			return nil, err
+		}
+		return loadManifestDir(s.fromManifests, s.usageFile)
+	case s.fromFile != "":
+		if s.usageFile != "" {
 			return nil, fmt.Errorf("--usage-file applies to --from-manifests, not --from-file")
 		}
-		return loadInputs(fromFile)
+		if err := s.rejectClusterFlags("--from-file"); err != nil {
+			return nil, err
+		}
+		return loadInputs(s.fromFile)
 	default:
-		return nil, fmt.Errorf("--from-file or --from-manifests required until the cluster read-layer lands")
+		return nil, fmt.Errorf("one of --from-file, --from-manifests, or --from-cluster is required")
 	}
+}
+
+// rejectClusterFlags refuses cluster-only flags on an offline source.
+func (s source) rejectClusterFlags(mode string) error {
+	for flag, set := range map[string]bool{
+		"--prometheus": s.prometheus != "",
+		"--namespace":  s.namespace != "",
+		"--context":    s.kubeContext != "",
+	} {
+		if set {
+			return fmt.Errorf("%s applies to --from-cluster, not %s", flag, mode)
+		}
+	}
+	return nil
+}
+
+// loadCluster reads workloads from the live cluster (via kubectl) and their
+// usage from Prometheus. Read-only: kubectl is only ever invoked with `get`.
+//
+// A workload Prometheus has no data for is excluded with a printed reason, never
+// sized on no data. A Prometheus that errors aborts the scan rather than looking
+// like a cluster with no waste.
+func loadCluster(ctx context.Context, s source) ([]scan.Input, error) {
+	if s.prometheus == "" {
+		return nil, fmt.Errorf("--prometheus is required with --from-cluster (e.g. --prometheus http://localhost:9090)")
+	}
+	kc := &kubeclient.Client{Namespace: s.namespace, Context: s.kubeContext}
+	workloads, err := kc.List(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if len(workloads) == 0 {
+		return nil, fmt.Errorf("no Deployments or StatefulSets found (namespace %q)", s.namespace)
+	}
+	pc := promclient.New(s.prometheus, &http.Client{Timeout: 30 * time.Second})
+	return clustersource.Collect(ctx, workloads, pc, promql.Defaults())
 }
 
 // loadManifestDir reads every *.json manifest in dir and attaches usage looked

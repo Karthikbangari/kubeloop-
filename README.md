@@ -72,6 +72,24 @@ go build -o bin/kubeloop ./cmd/kubeloop
 ./bin/kubeloop pr --from-file examples/offline-input.json --manifest examples/checkout-deployment.yaml --namespace shop --workload checkout-api --container app --out /tmp/checkout-deployment.patched.yaml
 ```
 
+### Scanning a live cluster (`--from-cluster`)
+
+Reads workloads from your current cluster and their usage from Prometheus. **Read-only** — the only verb kubeloop ever passes to `kubectl` is `get`, and it never writes to the cluster.
+
+```bash
+kubectl port-forward -n monitoring svc/prometheus 9090:9090 &
+./bin/kubeloop scan --from-cluster --prometheus http://localhost:9090
+./bin/kubeloop scan --from-cluster --prometheus http://localhost:9090 --namespace shop --context prod
+```
+
+Requirements: `kubectl` on `PATH` (kubeloop reuses your kubeconfig auth, including EKS/GKE/AKS exec plugins), and a Prometheus scraping cadvisor/kubelet metrics — `kube-prometheus-stack` works out of the box. Least-privilege RBAC: [`deploy/rbac.yaml`](deploy/rbac.yaml).
+
+Honest expectations:
+
+- A workload needs **≥7 days of usage history** to be sized. Newer ones are listed under `Excluded` with a reason, never sized on thin data.
+- A workload Prometheus has no data for is excluded with a reason — never assumed idle.
+- If Prometheus is **unreachable, the scan fails loudly**. It will not report `$0.00 waste`, which would read as "nothing to save."
+
 ### Scanning real manifests (`--from-manifests`)
 
 Point kubeloop at a directory of Kubernetes manifests (JSON, as from `kubectl get -o json`) and a usage export, and it reads the current requests straight from the manifests — no cluster access:
@@ -100,7 +118,7 @@ The usage export is a JSON map keyed by `namespace/name` — see [`examples/mani
 
 A workload with no usage entry is **excluded with a printed reason**, never sized on no data. A typo in the usage file is a hard error, not a silently-dropped field.
 
-Input can also be pre-assembled scan JSON shaped like [`examples/offline-input.json`](examples/offline-input.json). The offline `pr` subcommand prepares one patched manifest file and prints a PR title/body; it does not create branches, call GitHub, or touch the cluster. A future live read-layer will replace these flags with kubeconfig and Prometheus collection. Read-only RBAC manifest for that path: [`deploy/rbac.yaml`](deploy/rbac.yaml).
+Input can also be pre-assembled scan JSON shaped like [`examples/offline-input.json`](examples/offline-input.json). The offline `pr` subcommand prepares one patched manifest file and prints a PR title/body; it does not create branches, call GitHub, or touch the cluster.
 
 ## FAQ
 

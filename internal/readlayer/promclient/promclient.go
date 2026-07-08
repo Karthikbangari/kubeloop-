@@ -7,6 +7,7 @@ package promclient
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -43,7 +44,15 @@ func (c *Client) Query(ctx context.Context, promQL string) (val float64, ok bool
 	}
 	resp, err := c.http.Do(req)
 	if err != nil {
-		return 0, false, fmt.Errorf("prometheus request: %w", err)
+		// http wraps failures in *url.Error, whose Error() embeds the full
+		// request URL. A real PromQL query percent-encodes into hundreds of
+		// characters, so the useful part ("connection refused") drowns in a
+		// wall of %28%29%7B. Report the base URL and the underlying cause.
+		var ue *url.Error
+		if errors.As(err, &ue) {
+			return 0, false, fmt.Errorf("prometheus request to %s: %w", c.baseURL, ue.Err)
+		}
+		return 0, false, fmt.Errorf("prometheus request to %s: %w", c.baseURL, err)
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {

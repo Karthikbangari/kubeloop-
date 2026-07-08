@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 )
 
@@ -50,6 +51,22 @@ func TestQuery_Non200Errors(t *testing.T) {
 
 	if _, _, err := New(srv.URL, srv.Client()).Query(context.Background(), "q"); err == nil {
 		t.Error("want error on non-200 response")
+	}
+}
+
+// A transport failure must report the cause, not bury it under a few hundred
+// characters of percent-encoded PromQL (which is what *url.Error prints).
+func TestQuery_TransportErrorIsReadable(t *testing.T) {
+	c := New("http://127.0.0.1:1", nil) // nothing listens on port 1
+	_, _, err := c.Query(context.Background(), `max(quantile_over_time(0.95, sum by (pod) (rate(x{a!="",b=~"c-.*"}[5m]))[7d:5m]))`)
+	if err == nil {
+		t.Fatal("want an error")
+	}
+	if strings.Contains(err.Error(), "%28") || strings.Contains(err.Error(), "quantile_over_time") {
+		t.Errorf("the encoded query leaked into the error: %v", err)
+	}
+	if !strings.Contains(err.Error(), "http://127.0.0.1:1") {
+		t.Errorf("error should name the Prometheus base URL: %v", err)
 	}
 }
 

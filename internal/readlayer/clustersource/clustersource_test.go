@@ -12,10 +12,10 @@ import (
 	"github.com/kubeloop/kubeloop/internal/inventory"
 	"github.com/kubeloop/kubeloop/internal/readlayer/kubeparse"
 	"github.com/kubeloop/kubeloop/internal/readlayer/promclient"
+	"github.com/kubeloop/kubeloop/internal/readlayer/promql"
 	rs "github.com/kubeloop/kubeloop/internal/rightsizing"
 	"github.com/kubeloop/kubeloop/internal/savings"
 	"github.com/kubeloop/kubeloop/internal/scan"
-	promql "github.com/kubeloop/kubeloop/playground/slice-30-promql"
 )
 
 // promclient is the real Querier this package is built for.

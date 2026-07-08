@@ -43,6 +43,9 @@ pr ──► yaml.v3                              (PR-engine offline path:
 | `internal/readlayer/kubeparse` | Read-layer: serialized Deployment/StatefulSet JSON → identity + `inventory.Container`s. Malformed quantity is an error, never a silent zero. | inventory, quantityparse |
 | `internal/readlayer/manifestsource` | Read-layer: one manifest + usage → `scan.Input`, via `readlayer.ToScanInput`. | readlayer, kubeparse, rightsizing, scan |
 | `internal/readlayer/dirsource` | Read-layer: many manifests + a `namespace/name` usage map → `[]scan.Input`. Backs `--from-manifests`. | kubeparse, manifestsource, rightsizing, scan |
+| `internal/readlayer/kubeclient` | Live read-layer: lists Deployments/StatefulSets by shelling out to `kubectl get -o json`. Read-only by construction — the only verb ever passed is `get`. | kubeparse |
+| `internal/readlayer/promql` | Live read-layer: builds the P95/P99 CPU, max-memory, and history query strings + a kind-aware pod selector. Pure strings, no I/O. | — (leaf) |
+| `internal/readlayer/clustersource` | Live read-layer: workloads + Prometheus → `[]scan.Input`, via `readlayer.ToScanInput`. Backs `--from-cluster`. | kubeparse, manifestsource, promql, promusage, scan |
 | `internal/readlayer` | Composes inventory + usage into `scan.Input` (`ToScanInput`). Home of the future live cluster reader. | inventory, reporting, rightsizing, safety, scan |
 | `internal/pr` | PR engine offline core: find the raw YAML source file, verify and patch a target container's request YAML, compose reviewer-facing title/body, and return the prepared PR payload. | yaml.v3 |
 | `cmd/kubeloop` | CLI: flags, `--from-file` / `--from-manifests` input, text + explicit-schema `--json` output. | pr, readlayer/dirsource, reporting, rightsizing, savings, scan |
@@ -70,8 +73,18 @@ GitOps repo's manifests plus a Prometheus usage dump produce a ranked report
 with no cluster access at all. A workload with no usage entry is **excluded with
 a reason**, never sized on no data.
 
-## Not built yet (needs a real cluster / token)
-- **Live I/O**: the kube API **LIST** call (a client wrapping `kubeparse`) and **validated PromQL** query strings (need a real Prometheus to confirm; `promclient` takes the query as input for exactly this reason).
+## Live read-layer (built, graduated, validated against a real cluster)
+`kubeloop scan --from-cluster --prometheus URL` reads workloads with `kubectl get`
+and usage from Prometheus. Validated on kind + kube-prometheus-stack (RULEBOOK #77):
+metric names and labels confirmed, and the kind-aware pod selector demonstrably
+prevents a workload from absorbing a sibling's usage (`checkout-api-.*` matched
+`checkout-api-v2`'s pod; the real selector did not).
+
+- **`kubectl`, not client-go** — kubeparse already consumes `kubectl get -o json`, and kubectl inherits the user's kubeconfig auth (EKS/GKE/AKS exec plugins). A hosted scanner will need an in-process client.
+- **Still unvalidated:** 7-day windowing, which needs a cluster with a week of history.
+
+## Not built yet (needs a token)
+- **Real GitHub PR creation**: `gitrepo` (local branch/commit/push, validated against real git) and `ghclient` (POST /pulls, httptest-only) exist in `playground/`. The composer and `kubeloop pr --open` are unbuilt; a live PR has never been created.
 - **PR engine tail**: Helm/Kustomize rendered-to-source mapping and GitHub PR creation. The offline raw-YAML locator, patcher, composer, prepare, and guards exist in `internal/pr`.
 - **Hosted tier**: continuous scans, policy-gated auto-PRs, verified-savings ledger.
 

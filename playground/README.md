@@ -40,3 +40,6 @@ Graduated:
 - `slice-26-kubeparse/` moved to `../internal/readlayer/kubeparse/`.
 - `slice-27-manifestsource/` moved to `../internal/readlayer/manifestsource/`.
 - `slice-28-dirsource/` moved to `../internal/readlayer/dirsource/`; now backs the CLI's `--from-manifests` mode.
+- `slice-29-kubeclient/` moved to `../internal/readlayer/kubeclient/`.
+- `slice-30-promql/` moved to `../internal/readlayer/promql/`.
+- `slice-31-clustersource/` moved to `../internal/readlayer/clustersource/`; the three back the CLI's `--from-cluster` mode.
