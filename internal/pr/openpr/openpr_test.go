@@ -215,6 +215,38 @@ func TestOpen_RefusesPathEscape(t *testing.T) {
 	}
 }
 
+func TestOpen_RefusesSymlinkTarget(t *testing.T) {
+	g, c := &fakeGit{}, &fakeGH{}
+	req := request(t)
+	outside := filepath.Join(t.TempDir(), "outside.yaml")
+	if err := os.WriteFile(outside, []byte("outside: original\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	target := filepath.Join(req.RepoDir, req.Prepared.Path)
+	if err := os.Remove(target); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(outside, target); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err := Open(context.Background(), g, c, req)
+	if err == nil || !strings.Contains(err.Error(), "symlink") {
+		t.Fatalf("want symlink refusal, got %v", err)
+	}
+	for _, s := range g.steps {
+		if strings.HasPrefix(s, "branch:") || strings.HasPrefix(s, "commit:") || strings.HasPrefix(s, "push:") {
+			t.Errorf("symlink target: mutated git before refusing: %v", g.steps)
+		}
+	}
+	if c.n != 0 {
+		t.Error("must not call GitHub when refusing a symlink target")
+	}
+	if got, err := os.ReadFile(outside); err != nil || string(got) != "outside: original\n" {
+		t.Errorf("outside file = %q, %v", got, err)
+	}
+}
+
 func TestOpen_RefusesBranchEqualsBase(t *testing.T) {
 	g, c := &fakeGit{}, &fakeGH{}
 	req := request(t)

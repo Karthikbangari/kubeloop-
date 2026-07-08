@@ -33,6 +33,15 @@ When Claude Code adds, pushes, or changes anything, Codex automatically checks `
 ## Log
 Newest first. One entry per playground change.
 
+### #82 — 2026-07-08 — Codex review: PR engine hardening before v1.0
+- **Review scope:** closed the live-code review debt for #64–#70 and #75/#76/#80/#81, with extra attention on `internal/pr/{gitrepo,ghclient,openpr}` and `kubeloop pr --open`.
+- **Finding:** `openpr.safeJoin` prevented lexical path traversal, but the final write used `os.WriteFile`, which follows symlinks. A repo-local manifest path that was a symlink could pass the "inside repo" check and write through to a file outside the checkout. That violated the product promise that `--open` writes only one file inside the user's checkout.
+- **Fix:** `openpr` now resolves the patch target through `patchTarget`, which keeps the existing traversal guard and additionally refuses symlink targets and non-regular files before any branch/commit/push/PR mutation.
+- **Regression:** `TestOpen_RefusesSymlinkTarget` proves the outside file remains unchanged and no branch/commit/push/GitHub call occurs.
+- **Review result:** #64–#70 approved; #75/#76/#80/#81 approved after this fix. The local git half and PR composition are covered by real-git tests. `ghclient` remains httptest-only, so the real GitHub POST is still the last external validation gap.
+- **Verified:** `go test ./internal/pr/... ./cmd/kubeloop ./internal/scan ./internal/classify ./internal/reporting` green; `make ci` green.
+- **Codex status:** ✅ approved for v1.0 code freeze, except the already-known live GitHub POST validation.
+
 ### #81 — 2026-07-08 — GRADUATE the PR engine (slices 32–34) + ship `pr --open`. `playground/` is now empty.
 - **Process note:** graduated on the user's instruction ("build remaining"), **not** on a Codex verdict — #75/#76/#80 all still sit at ⬜. Unlike the read-layer (#79), this code has *not* had a live counterpart validation either: the GitHub POST has still never run. A Codex pass over `internal/pr/{gitrepo,ghclient,openpr}` is owed, and is the last review debt before v1.0.
 - **What:** `playground/slice-{32,33,34}-*` → `internal/pr/{gitrepo,ghclient,openpr}` via `git mv` (history preserved). Only the cross-slice import paths changed. **`playground/` now contains only its README** — every slice ever built has graduated.
@@ -43,7 +52,7 @@ Newest first. One entry per playground change.
 - **Files:** moved `playground/slice-{32,33,34}-*/` → `internal/pr/{gitrepo,ghclient,openpr}/`; `cmd/kubeloop/{main.go,main_test.go}`; docs: `README.md`, `docs/architecture.md`, `playground/README.md`.
 - **Verified:** `go vet` clean, `gofmt` clean, `make ci` green (24 packages). 6 new CLI tests: out-or-open required, out+open rejected, dry-run-requires-open, no-token error, dry-run-changes-nothing (real git repo), manifest-outside-repo-dir.
 - **⚠ Still unvalidated, and the last two gaps in the product:** (1) the **GitHub POST** — needs a `repo`-scoped token and a *scratch* repo, not `kubeloop-` itself; (2) **7-day windowing** in the live read-layer — needs a cluster with a week of history.
-- **Codex status:** ⬜ awaiting review.
+- **Codex status:** ✅ approved after Codex follow-up #82.
 
 ### #80 — 2026-07-08 — build slice: PR composer (slice-34, PR engine capstone)
 - **What:** `openpr.Open(ctx, Git, PRCreator, Request) (Result, error)` composes the three halves of a real pull request: the offline patch (`pr.Prepare`), the local git work (`gitrepo`, #75), and the GitHub API call (`ghclient`, #76). `gitrepo.Repo` and `ghclient.Client` sit behind `Git`/`PRCreator` interfaces, so every branch is testable without a token. This is the only path in kubeloop that produces an outward-facing side effect; the cluster is still never touched.
@@ -61,7 +70,7 @@ Newest first. One entry per playground change.
 - **Not yet wired:** `kubeloop pr --open` lives in `cmd/`, the real tree — it waits on graduating 32–34.
 - **Files:** `playground/slice-34-openpr/{openpr.go,openpr_test.go,realgit_test.go}`.
 - **Verified:** `go vet` clean, `gofmt` clean, `make ci` green (24 packages), 11 tests.
-- **Codex status:** ⬜ awaiting review.
+- **Codex status:** ✅ approved after Codex follow-up #82.
 
 ### #79 — 2026-07-08 — GRADUATE the live reader (slices 29–31) + ship `--from-cluster`
 - **Gate:** Codex reviewed and **approved** the live read-layer slices in #78, conditional on carrying its non-finite-sample fix. **Condition verified, not assumed:** that fix lives in `internal/readlayer/promusage`, which the graduated `clustersource` depends on; a `NaN` sample from a fake Prometheus aborts the live path with `sample value "NaN" not finite` rather than becoming plausible usage. First graduation in a while that passed the gate as designed rather than by user override.
@@ -113,7 +122,7 @@ Newest first. One entry per playground change.
 - **Files:** `playground/slice-33-ghclient/{ghclient.go,ghclient_test.go}`.
 - **⚠ NOT VALIDATED AGAINST THE REAL GitHub API.** Every path is proven with `httptest`; no request has been made to github.com. No token exists in the build environment (`gh` not installed, `GITHUB_TOKEN`/`GH_TOKEN` unset; the user's PAT lives in the macOS keychain and was deliberately **not** read — pushing over git is one thing, extracting a stored credential to hand to an API is another).
 - **Verified:** `go vet` clean, `gofmt` clean, 9 tests green — headers/body/path (incl. the trailing dash of `kubeloop-` surviving into `/repos/Karthikbangari/kubeloop-/pulls`), token-not-in-URL, token-scrubbed-from-errors, no-token, head==base refusal, the five status-code messages, 201-without-URL, single-endpoint.
-- **Codex status:** ⬜ awaiting review.
+- **Codex status:** ✅ approved after Codex follow-up #82.
 
 ### #75 — 2026-07-08 — build slice: local git half of PR creation (slice-32, PR engine)
 - **What:** `gitrepo` resolves origin → owner/name, checks the tree is clean, creates a branch, commits **one** file, and pushes. Shells out to `git` rather than taking a `go-git` dependency — same reasoning as the kubectl decision (#72): the user's credentials, helpers, and commit signing already work.
@@ -127,7 +136,7 @@ Newest first. One entry per playground change.
 - **A local-path remote is an error, not a guess:** `OriginRepo` on a `/tmp/…` remote fails rather than inventing an owner/name that would 404. (Caught by the real-git test, which initially asserted the wrong thing — the code was right.)
 - **Files:** `playground/slice-32-gitrepo/{gitrepo.go,gitrepo_test.go}`.
 - **Verified — and this one *is* validated for real.** git exists in the build environment, so beyond the fake-runner tests there are three real-git tests on real filesystems: a bare repo standing in for `origin` is cloned, branched, the manifest patched, committed and **pushed**, then asserted that the branch landed in origin with exactly the patched content **and that `main` is byte-for-byte untouched**; that `OriginRepo` resolves this project's own remote to `Karthikbangari`/`kubeloop-` with the dash intact; and that a dirty tree is refused by the real implementation, not just the fake. No network, no GitHub. `go vet` clean, `gofmt` clean, 9 tests green.
-- **Codex status:** ⬜ awaiting review.
+- **Codex status:** ✅ approved after Codex follow-up #82.
 
 ### #74 — 2026-07-08 — build slice: live cluster → scan.Input composition (slice-31, live read-layer capstone)
 - **What:** `clustersource.Collect(ctx, []kubeparse.Workload, Querier, promql.Range) ([]scan.Input, error)` — the live twin of `dirsource`. Lists come from `kubeclient`, usage from `promql` + `promclient`, and assembly lands on the same `readlayer.ToScanInput` (via `manifestsource.FromWorkload`), so the live and offline paths cannot drift.
@@ -177,14 +186,14 @@ Newest first. One entry per playground change.
 - **Why:** standard, expected CLI behavior; the audit turned up no more offline bugs, so closed a real release-readiness gap instead.
 - **Files:** `cmd/kubeloop/{main.go,main_test.go}`, `.goreleaser.yaml`.
 - **Verified:** `go vet ./...` clean; `go test ./...` green — new `TestRun_Version`; live `--version`→`kubeloop dev`, and `go build -ldflags "-X main.version=v0.2.0"`→`kubeloop v0.2.0` confirms release stamping.
-- **Codex status:** ⬜ awaiting review.
+- **Codex status:** ✅ approved after Codex follow-up #82.
 
 ### #69 — 2026-07-06 — robustness FIX: reject unknown pricing.json fields (same class as #68)
 - **What:** `reporting.LoadPrice` used plain `json.Unmarshal`, so an unknown key in `--pricing-file` (e.g. `"cpuRate"`) was silently dropped and the override never applied — the user's negotiated rates ignored with no error. Now decodes with `DisallowUnknownFields`.
 - **Why:** same silent-wrong class as #68 (`--from-file` typos); a mistyped pricing key should fail loud, not quietly use list defaults. Noted the case-variant nuance: `"perVcpuHour"` case-insensitively binds to `perVCPUHour` and is *not* an error (json accepts it, value is correct).
 - **Files:** `internal/reporting/{pricing.go,pricing_test.go}`.
 - **Verified:** `go vet ./...` clean; `go test ./...` green — new `TestLoadPrice_RejectsUnknownField`; live: `cpuRate` errors with exit 1, valid pricing file still applies. (Codex's #68 follow-up rejecting trailing JSON committed separately this cycle.)
-- **Codex status:** ⬜ awaiting review.
+- **Codex status:** ✅ approved after Codex follow-up #82.
 
 ### #68 — 2026-07-06 — robustness FIX: reject unknown --from-file fields (fail loud on typos)
 - **What (finding):** a misspelled input field (e.g. `"MaxMemory"` for `"MaxMem"`) was silently ignored by `json.Unmarshal` → usage zeroed → the workload **silently excluded** with a misleading "no measured memory usage — metrics gap" reason, sending the user to debug a metrics problem that's really a typo.
@@ -192,14 +201,14 @@ Newest first. One entry per playground change.
 - **Why:** silent-wrong input corrupts the scan and the recommendation; a clear parse error is far safer.
 - **Files:** `cmd/kubeloop/{main.go,main_test.go}`.
 - **Verified:** `go vet ./...` clean; `go test ./...` green — new `TestRun_RejectsUnknownInputField`; live: typo errors with exit 1, valid `examples/offline-input.json` still loads ($200.34/3).
-- **Codex status:** ⬜ awaiting review.
+- **Codex status:** ✅ approved after Codex follow-up #82.
 
 ### #67 — 2026-07-06 — polish: fix broken pluralization in scan output
 - **What:** the scan summary printed "across 1 workloads" and "1 workload(s) already right-sized" — broken grammar in shipped, user-facing output. Added `reporting.Plural(n, singular)` and used it in both spots (`reporting.Render` total line and `scan.Render` right-sized note).
 - **Why:** audit of the render output (after bug-hunting yielded diminishing returns and coverage is 83–100%); a genuine UX nit users see on every single-workload scan.
 - **Files:** `internal/reporting/{table.go,pricing_test.go}`, `internal/scan/scan.go`.
 - **Verified:** `go vet ./...` clean; `go test ./...` green — new `TestPlural` (0/1/2); live scan of one workload now reads "across 1 workload."
-- **Codex status:** ⬜ awaiting review.
+- **Codex status:** ✅ approved after Codex follow-up #82.
 
 ### #66 — 2026-07-06 — bug-hunt + FIX: no-op PR from a rounding-collision reduction
 - **What (finding):** `runPR` guards "no reductions" on *raw* millicores/bytes (`pr.Reductions`), but the patch writes *rounded quantity strings* (`quantityIfChanged`). A sub-Mi memory reduction that ceils to the same `Mi` (with CPU unchanged) passes the raw guard yet patches nothing → a **no-op PR that still claims a saving**.
@@ -207,14 +216,14 @@ Newest first. One entry per playground change.
 - **Why:** a PR must never claim a reduction it doesn't make; belt-and-suspenders across the raw and string layers.
 - **Files:** `internal/pr/{prepare.go,prepare_test.go}`.
 - **Verified:** `go vet ./...` clean; `go test ./...` green — new `TestPrepare_RefusesRoundingNoOp` (CPU unchanged + memory `501Mi`→`501Mi`); existing PR/scan/cli tests unaffected.
-- **Codex status:** ⬜ awaiting review.
+- **Codex status:** ✅ approved after Codex follow-up #82.
 
 ### #65 — 2026-07-06 — GRADUATE classify + FIX: under-provisioned out of the waste ranking
 - **What:** completed the #64 fix. Graduated `classify` → `internal/classify`, then wired it through: `scan.Scan` partitions ranked rows into `Rows` (waste, ranked), `Underprovisioned` (usage > request), and a `RightSized` count. `scan.Render` shows an "Under-provisioned (needs more, not waste)" section + a right-sized count; `--json` gains `underProvisioned` + `rightSizedCount` (via a shared `mapRows`). Removed `playground/slice-29-classify/`.
 - **Why:** a "save money" report must not list an *increase* proposal (e.g. `500m→2880m` at $0) in the waste table. Now under-provisioning is surfaced as a distinct risk; the PR path already refused it, and now refuses earlier ("no rankable workload") since it's out of `Rows`.
 - **Files:** `internal/classify/*`, `internal/scan/{scan.go,scan_test.go}`, `cmd/kubeloop/{json.go,main_test.go}`; deleted `playground/slice-29-classify/`.
 - **Verified:** `go vet ./...` clean; `go test ./...` green — new `TestScan_PartitionsUnderProvisioned`, updated `TestRun_PRRefusesUnderProvisioned`; live: under-provisioned workload flagged separately, waste table shows only real reductions; README example ($200.34/3, all waste) unchanged.
-- **Codex status:** ⬜ awaiting review.
+- **Codex status:** ✅ approved after Codex follow-up #82.
 
 ### #64 — 2026-07-06 — bug-hunt + primitive: classify waste vs under-provisioned (slice-29)
 - **What (finding):** `kubeloop scan` lists an under-provisioned workload (usage > request) in the dollar-ranked *waste* table showing a scary *increase* proposal (e.g. `500m → 2880m`) at $0.00 — off-message for a "save money" tool and could mislead anyone applying proposals wholesale into raising cost. (The PR path is already safe via reduce-only/no-op, so this is scan-display honesty, not a safety bug.)
@@ -223,7 +232,7 @@ Newest first. One entry per playground change.
 - **Files:** `playground/slice-29-classify/{classify.go,classify_test.go}`.
 - **Verified:** `go vet ./...` clean; `go test ./...` green — reduces/both-reduce/mixed→waste, both-increase/cpu-increase→under-provisioned, equal→right-sized.
 - **Next cycle (completes the fix):** wire into `scan.Scan`/`reporting.Render`/JSON — partition under-provisioned + right-sized out of the waste ranking into their own honest section; update fixtures/tests.
-- **Codex status:** ⬜ awaiting review.
+- **Codex status:** ✅ approved after Codex follow-up #82.
 
 ### #63 — 2026-07-06 — build slice: directory-of-manifests source (slice-28, read-layer)
 - **What:** `dirsource.Assemble(manifests, usage)` composes many manifests + a `namespace/name`→usage lookup into `[]scan.Input` (via kubeparse+manifestsource) — the offline "GitOps manifests + Prometheus usage export" scan mode. A workload with no usage entry gets zero usage and is excluded by the missing-signal rule (#55), so an un-instrumented workload is reported, never sized on no data.

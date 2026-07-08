@@ -87,9 +87,9 @@ func Open(ctx context.Context, g Git, c PRCreator, req Request) (Result, error) 
 	if branch == base {
 		return Result{}, fmt.Errorf("refusing to open a pull request from %q onto itself", base)
 	}
-	// Resolve the write target before touching git, so a traversing path can
-	// never escape the checkout.
-	abs, err := safeJoin(req.RepoDir, req.Prepared.Path)
+	// Resolve the write target before touching git, so a traversing path or
+	// symlink can never escape the checkout.
+	abs, err := patchTarget(req.RepoDir, req.Prepared.Path)
 	if err != nil {
 		return Result{}, err
 	}
@@ -184,6 +184,27 @@ func safeJoin(root, rel string) (string, error) {
 	inside, err := filepath.Rel(rootAbs, full)
 	if err != nil || inside == ".." || strings.HasPrefix(inside, ".."+string(os.PathSeparator)) {
 		return "", fmt.Errorf("manifest path %q escapes the repository directory", rel)
+	}
+	return full, nil
+}
+
+// patchTarget returns the regular file to overwrite. A symlink inside the repo
+// can point outside it, and os.WriteFile follows symlinks, so reject anything
+// but a regular file at the final path.
+func patchTarget(root, rel string) (string, error) {
+	full, err := safeJoin(root, rel)
+	if err != nil {
+		return "", err
+	}
+	info, err := os.Lstat(full)
+	if err != nil {
+		return "", fmt.Errorf("stat manifest path %q: %w", rel, err)
+	}
+	if info.Mode()&os.ModeSymlink != 0 {
+		return "", fmt.Errorf("manifest path %q is a symlink; refusing to write through it", rel)
+	}
+	if !info.Mode().IsRegular() {
+		return "", fmt.Errorf("manifest path %q is not a regular file", rel)
 	}
 	return full, nil
 }
