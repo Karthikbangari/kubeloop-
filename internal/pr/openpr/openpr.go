@@ -188,13 +188,44 @@ func safeJoin(root, rel string) (string, error) {
 	return full, nil
 }
 
-// patchTarget returns the regular file to overwrite. A symlink inside the repo
-// can point outside it, and os.WriteFile follows symlinks, so reject anything
-// but a regular file at the final path.
+// patchTarget returns the regular file to overwrite.
+//
+// safeJoin only rules out *lexical* traversal, and os.WriteFile follows
+// symlinks, so two escapes remain and both are closed here:
+//
+//   - the leaf is a symlink: "deploy.yaml" -> /etc/passwd. Caught by Lstat,
+//     which does not follow the link.
+//   - an intermediate directory is a symlink: "sub" -> /etc, so "sub/passwd"
+//     is lexically inside the repo and its leaf is a genuine regular file.
+//     Lstat on the leaf sees nothing wrong. Only resolving the parent
+//     directory's symlinks and re-checking containment catches this.
+//
+// Both are refused before any branch/commit/push/PR happens, so a hostile
+// manifest path cannot make kubeloop write outside the checkout it was given.
 func patchTarget(root, rel string) (string, error) {
 	full, err := safeJoin(root, rel)
 	if err != nil {
 		return "", err
+	}
+	// Resolve the root too: on macOS a temp dir under /var is itself reached
+	// through a /var -> /private/var symlink, so comparing an unresolved root
+	// against a resolved child would reject every legitimate path. Absolute
+	// first, since --repo-dir is often ".".
+	rootAbs, err := filepath.Abs(root)
+	if err != nil {
+		return "", err
+	}
+	rootReal, err := filepath.EvalSymlinks(rootAbs)
+	if err != nil {
+		return "", fmt.Errorf("resolve repository directory: %w", err)
+	}
+	parentReal, err := filepath.EvalSymlinks(filepath.Dir(full))
+	if err != nil {
+		return "", fmt.Errorf("resolve manifest directory for %q: %w", rel, err)
+	}
+	inside, err := filepath.Rel(rootReal, parentReal)
+	if err != nil || inside == ".." || strings.HasPrefix(inside, ".."+string(os.PathSeparator)) {
+		return "", fmt.Errorf("manifest path %q resolves outside the repository (a parent directory is a symlink)", rel)
 	}
 	info, err := os.Lstat(full)
 	if err != nil {

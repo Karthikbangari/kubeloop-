@@ -286,3 +286,68 @@ func TestCommitMessage(t *testing.T) {
 		t.Error("empty title must fall back to a real message")
 	}
 }
+
+// A symlinked *intermediate directory* is the escape that a leaf-only Lstat
+// check misses: repo/sub -> /outside means "sub/secret.yaml" is lexically
+// inside the repo and its leaf is a genuine regular file. Only resolving the
+// parent directory catches it. Regression for a hole found while verifying #82.
+func TestOpen_RefusesSymlinkedParentDir(t *testing.T) {
+	repo, outsideDir := t.TempDir(), t.TempDir()
+	outside := filepath.Join(outsideDir, "secret.yaml")
+	if err := os.WriteFile(outside, []byte("ORIGINAL\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(outsideDir, filepath.Join(repo, "sub")); err != nil {
+		t.Fatal(err)
+	}
+
+	g, c := &fakeGit{}, &fakeGH{}
+	_, err := Open(context.Background(), g, c, Request{
+		Prepared: pr.Prepared{Path: filepath.Join("sub", "secret.yaml"),
+			Content: []byte("PATCHED\n"), Title: "t", Body: "b"},
+		RepoDir: repo,
+		Ref:     pr.Ref{Namespace: "shop", Name: "checkout-api"},
+	})
+	if err == nil {
+		t.Fatal("must refuse a path whose parent directory is a symlink")
+	}
+	if got, _ := os.ReadFile(outside); string(got) != "ORIGINAL\n" {
+		t.Fatalf("SECURITY: wrote outside the repository: %q", got)
+	}
+	if c.n != 0 {
+		t.Error("must not call GitHub")
+	}
+	for _, s := range g.steps {
+		if strings.HasPrefix(s, "branch:") || strings.HasPrefix(s, "commit:") || strings.HasPrefix(s, "push:") {
+			t.Errorf("mutated git before refusing: %v", g.steps)
+		}
+	}
+}
+
+// A legitimate manifest in a real subdirectory must still work — the symlink
+// guard must not reject ordinary nested paths.
+func TestOpen_AllowsRealSubdirectory(t *testing.T) {
+	repo := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(repo, "deploy", "prod"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	rel := filepath.Join("deploy", "prod", "app.yaml")
+	if err := os.WriteFile(filepath.Join(repo, rel), []byte("cpu: 2000m\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	res, err := Open(context.Background(), &fakeGit{}, &fakeGH{}, Request{
+		Prepared: pr.Prepared{Path: rel, Content: []byte("cpu: 576m\n"), Title: "t", Body: "b"},
+		RepoDir:  repo,
+		Ref:      pr.Ref{Namespace: "shop", Name: "checkout-api"},
+	})
+	if err != nil {
+		t.Fatalf("a real nested path must be allowed: %v", err)
+	}
+	if !res.Pushed {
+		t.Error("expected a completed flow")
+	}
+	got, _ := os.ReadFile(filepath.Join(repo, rel))
+	if string(got) != "cpu: 576m\n" {
+		t.Errorf("patch not applied: %q", got)
+	}
+}

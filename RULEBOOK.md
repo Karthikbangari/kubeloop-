@@ -33,6 +33,18 @@ When Claude Code adds, pushes, or changes anything, Codex automatically checks `
 ## Log
 Newest first. One entry per playground change.
 
+### #83 — 2026-07-08 — SECURITY: #82's symlink guard was incomplete — a symlinked *parent directory* still escaped
+- **Context:** Codex's #82 found a real vulnerability: `safeJoin` blocked only *lexical* traversal, while `os.WriteFile` follows symlinks, so a repo-local manifest that was a symlink could write outside the checkout. Its fix (`patchTarget` + `os.Lstat`) is correct — and was verified here, not assumed.
+- **Finding while verifying it:** the guard checked only the **leaf**. An escape remained through a symlinked **intermediate directory**: with `repo/sub -> /outside`, the path `sub/secret.yaml` is lexically inside the repo *and* its leaf is a genuine regular file, so `Lstat` on the leaf sees nothing wrong. Reproduced as an attack test before touching the code: `kubeloop` wrote `PWNED` to a file outside the repository and returned **`err = nil`**. This breaks the product's core promise that `--open` writes exactly one file inside the user's checkout.
+- **Fix:** `patchTarget` now resolves symlinks on the target's **parent directory** (`filepath.EvalSymlinks`) and re-checks containment against the resolved root, before the existing leaf checks. The root is resolved too — on macOS a temp dir under `/var` is reached through the `/var -> /private/var` symlink, so comparing an unresolved root against a resolved child would reject every legitimate path. `filepath.Abs` first, since `--repo-dir` is usually `.`.
+- **Not over-broad:** a real nested path (`deploy/prod/app.yaml`) still works. Pinned by `TestOpen_AllowsRealSubdirectory`, so a future tightening can't silently break ordinary layouts.
+- **Refused before any mutation:** no branch, no commit, no push, no GitHub call — asserted, and the file outside the repo is byte-for-byte unchanged.
+- **Regression:** `TestOpen_RefusesSymlinkedParentDir` (the escape) + `TestOpen_AllowsRealSubdirectory` (the false positive). Codex's `TestOpen_RefusesSymlinkTarget` retained for the leaf case.
+- **Verified live:** `kubeloop pr --open --dry-run --manifest evil/kl-evil.yaml` (where `evil -> /tmp`) → `manifest path "evil/kl-evil.yaml" resolves outside the repository (a parent directory is a symlink)`. A real `deploy/app.yaml` in the same checkout still dry-runs cleanly.
+- **Files:** `internal/pr/openpr/{openpr.go,openpr_test.go}`.
+- **Verified:** `go vet` clean, `gofmt` clean, `make ci` green (24 packages), 14 openpr tests.
+- **Codex status:** ⬜ awaiting review (this hardens Codex's own #82 fix).
+
 ### #82 — 2026-07-08 — Codex review: PR engine hardening before v1.0
 - **Review scope:** closed the live-code review debt for #64–#70 and #75/#76/#80/#81, with extra attention on `internal/pr/{gitrepo,ghclient,openpr}` and `kubeloop pr --open`.
 - **Finding:** `openpr.safeJoin` prevented lexical path traversal, but the final write used `os.WriteFile`, which follows symlinks. A repo-local manifest path that was a symlink could pass the "inside repo" check and write through to a file outside the checkout. That violated the product promise that `--open` writes only one file inside the user's checkout.
