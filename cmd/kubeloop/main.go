@@ -21,6 +21,9 @@ import (
 	"time"
 
 	pr "github.com/kubeloop/kubeloop/internal/pr"
+	"github.com/kubeloop/kubeloop/internal/pr/ghclient"
+	"github.com/kubeloop/kubeloop/internal/pr/gitrepo"
+	"github.com/kubeloop/kubeloop/internal/pr/openpr"
 	"github.com/kubeloop/kubeloop/internal/pr/quantity"
 	"github.com/kubeloop/kubeloop/internal/readlayer/clustersource"
 	"github.com/kubeloop/kubeloop/internal/readlayer/dirsource"
@@ -128,11 +131,26 @@ func runPR(args []string, out io.Writer) error {
 	outFile := fs.String("out", "", "write patched manifest to this path")
 	var manifests manifestFiles
 	fs.Var(&manifests, "manifest", "manifest file to search; repeat for multiple files")
+	open := fs.Bool("open", false, "open a pull request on GitHub (requires GITHUB_TOKEN with `repo` scope)")
+	repoDir := fs.String("repo-dir", ".", "git checkout containing the manifest, used with --open")
+	base := fs.String("base", "", "base branch for the pull request (default: the checked-out branch)")
+	dryRun := fs.Bool("dry-run", false, "with --open: print what would happen and change nothing")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
-	if *fromFile == "" || *workload == "" || *container == "" || *outFile == "" || len(manifests) == 0 {
-		return fmt.Errorf("pr requires --from-file, --manifest, --workload, --container, and --out")
+	if *fromFile == "" || *workload == "" || *container == "" || len(manifests) == 0 {
+		return fmt.Errorf("pr requires --from-file, --manifest, --workload, --container, and one of --out or --open")
+	}
+	// --out writes the patched manifest locally; --open branches, commits,
+	// pushes, and opens a pull request. Requiring exactly one keeps the side
+	// effects of the command unambiguous.
+	switch {
+	case *outFile == "" && !*open:
+		return fmt.Errorf("pr requires one of --out (write the patched manifest) or --open (open a pull request)")
+	case *outFile != "" && *open:
+		return fmt.Errorf("use either --out or --open, not both")
+	case *dryRun && !*open:
+		return fmt.Errorf("--dry-run applies to --open")
 	}
 	inputs, err := loadInputs(*fromFile)
 	if err != nil {
@@ -166,9 +184,10 @@ func runPR(args []string, out io.Writer) error {
 	if err != nil {
 		return err
 	}
+	ref := pr.Ref{Kind: *kind, Name: row.Name, Namespace: row.Namespace}
 	prepared, err := pr.Prepare(pr.Request{
 		Files:       files,
-		Ref:         pr.Ref{Kind: *kind, Name: row.Name, Namespace: row.Namespace},
+		Ref:         ref,
 		Container:   *container,
 		CurrentCPU:  quantity.CPU(row.Current.CPU),
 		ProposedCPU: proposedCPU,
@@ -182,10 +201,68 @@ func runPR(args []string, out io.Writer) error {
 	if err != nil {
 		return err
 	}
+	if *open {
+		// openpr writes Prepared.Path inside --repo-dir, so the path must be
+		// repo-relative. Users naturally pass absolute or CWD-relative manifest
+		// paths, so relativize here rather than making them do it.
+		rel, err := repoRelative(*repoDir, prepared.Path)
+		if err != nil {
+			return err
+		}
+		prepared.Path = rel
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+		defer cancel()
+		return openPullRequest(ctx, out, prepared, ref, *repoDir, *base, *dryRun)
+	}
 	if err := os.WriteFile(*outFile, prepared.Content, 0o644); err != nil {
 		return err
 	}
 	fmt.Fprintf(out, "Patched manifest: %s -> %s\n\n%s\n\n%s", prepared.Path, *outFile, prepared.Title, prepared.Body)
+	return nil
+}
+
+// repoRelative expresses a manifest path relative to the repo checkout. A
+// manifest outside the checkout is refused by name, rather than deferring to
+// openpr's generic "escapes the repository directory".
+func repoRelative(repoDir, manifest string) (string, error) {
+	root, err := filepath.Abs(repoDir)
+	if err != nil {
+		return "", err
+	}
+	abs, err := filepath.Abs(manifest)
+	if err != nil {
+		return "", err
+	}
+	rel, err := filepath.Rel(root, abs)
+	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(os.PathSeparator)) {
+		return "", fmt.Errorf("manifest %s is not inside --repo-dir %s", manifest, repoDir)
+	}
+	return rel, nil
+}
+
+// openPullRequest branches, commits the patched manifest, pushes, and opens a
+// pull request. This is the only outward-facing side effect kubeloop has; the
+// cluster is never touched. --dry-run performs none of it.
+func openPullRequest(ctx context.Context, out io.Writer, prepared pr.Prepared, ref pr.Ref, repoDir, base string, dryRun bool) error {
+	token := ghclient.TokenFromEnv()
+	if token == "" && !dryRun {
+		return fmt.Errorf("no GitHub token: set GITHUB_TOKEN (needs `repo` scope), or use --dry-run to see the plan")
+	}
+	res, err := openpr.Open(ctx,
+		&gitrepo.Repo{Dir: repoDir},
+		ghclient.New(token, &http.Client{Timeout: 30 * time.Second}),
+		openpr.Request{Prepared: prepared, RepoDir: repoDir, Ref: ref, Base: base, DryRun: dryRun},
+	)
+	if err != nil {
+		return err
+	}
+	if res.DryRun {
+		fmt.Fprintf(out, "Dry run — nothing was changed.\n\n"+
+			"Would patch:  %s\nWould branch: %s\nWould open:   %s\n",
+			prepared.Path, res.Branch, prepared.Title)
+		return nil
+	}
+	fmt.Fprintf(out, "Opened pull request #%d\n  %s\n  branch: %s\n", res.PRNumber, res.PRURL, res.Branch)
 	return nil
 }
 

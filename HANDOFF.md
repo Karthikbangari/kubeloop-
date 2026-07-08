@@ -9,8 +9,24 @@ as a **reviewed pull request** — it never writes to a cluster. Pitch: *"KRR te
 right numbers; kubeloop ranks the waste and gets it merged."* See `README.md` and
 `plan/MASTER-PLAN-LOOPED.md`.
 
-## Status: v0.1 offline is complete and working
-Everything that can run without a live cluster is built, tested, and hardened.
+## Status: feature-complete. Two things have never run against the real world.
+Every planned code milestone is built, tested, graduated, and on `main`. `playground/` is empty.
+
+- `kubeloop scan --from-cluster --prometheus URL` → reads the **live cluster** (read-only `kubectl get`)
+  and Prometheus, ranks waste. Validated against kind + kube-prometheus-stack (RULEBOOK #77).
+- `kubeloop pr --open` → branches, commits the patched manifest, pushes, opens a **real pull request**.
+  Local git half validated for real; the GitHub POST has never run.
+
+**The two unvalidated gaps — read these before trusting output:**
+1. **The GitHub POST has never reached github.com.** `internal/pr/ghclient` is httptest-only. Needs a
+   `repo`-scoped `GITHUB_TOKEN` and a *scratch* repo (not `kubeloop-` itself) to prove.
+2. **7-day windowing is unproven.** The live queries were validated on a minutes-old kind cluster, so
+   metric names, labels, and the pod selector are confirmed, but `[7d:5m]` behaviour is not. Needs a
+   cluster with a week of history.
+
+Also: RULEBOOK entries **#64–#70, #75, #76, #80, #81** are live code that Codex has not reviewed.
+
+## What still works offline
 
 - `kubeloop scan --from-file <json>` → dollar-ranked waste table (confidence, JVM cautions,
   exclusions with reasons, under-provisioned flagged separately, immediate-vs-node-consolidation
@@ -22,7 +38,8 @@ Everything that can run without a live cluster is built, tested, and hardened.
 - `kubeloop pr --from-file <json> --manifest <yaml> --workload X --container app --out <path>`
   → locates the source manifest, patches only the reduced requests, writes it, and prints a PR
   title/body (evidence, rollback, read-only disclaimer). Refuses multi-container pods, ambiguous
-  names, no-op/under-provisioned targets.
+  names, no-op/under-provisioned targets. Swap `--out` for `--open` to open a real PR
+  (`--dry-run` shows the plan and needs no token).
 - `kubeloop --version`, `make ci` green, `deploy/rbac.yaml` (least-privilege read-only), CI +
   GoReleaser + Homebrew-less packaging.
 
@@ -34,8 +51,18 @@ make build                                # -> bin/kubeloop
 ./bin/kubeloop scan --from-file examples/offline-input.json
 ./bin/kubeloop scan --from-manifests examples/manifests --usage-file examples/manifests-usage.json
 ```
-Note: local test runs use a workspace-local cache: `GOCACHE=$PWD/.gocache GOMODCACHE=$PWD/.gomodcache`
-(the default `~/Library/Caches` path is sandbox-blocked here). CI uses defaults and is fine.
+Note: Go uses its default caches (`go env GOCACHE` → `~/Library/Caches/go-build`). An earlier setup
+kept workspace-local `.gocache/`/`.gomodcache/`; those went stale and were deleted. Nothing sets
+`GOCACHE`/`GOMODCACHE` — not the Makefile, not CI.
+
+To exercise the live paths you need a cluster and a Prometheus:
+```bash
+go install sigs.k8s.io/kind@latest && kind create cluster --name kubeloop
+helm install kps prometheus-community/kube-prometheus-stack -n monitoring --create-namespace
+kubectl port-forward -n monitoring svc/kps-kube-prometheus-stack-prometheus 9090:9090 &
+./bin/kubeloop scan --from-cluster --prometheus http://localhost:9090
+kind delete cluster --name kubeloop   # when done
+```
 
 ## Architecture
 Full map in `docs/architecture.md`. Layering (leaves → composition):
@@ -52,22 +79,28 @@ Full map in `docs/architecture.md`. Layering (leaves → composition):
   → `/dirsource` (manifests → `[]scan.Input`, backs `--from-manifests`).
 - `cmd/kubeloop` — the CLI (`scan`/`pr`/`--version`).
 
-## Done since the last snapshot
-- ✅ **Read-layer graduated** (RULEBOOK #71, Codex-approved): the 5 playground slices moved into
-  `internal/readlayer/{promclient,quantityparse,kubeparse,manifestsource,dirsource}`, and
-  `--from-manifests` shipped. `playground/` is now empty. Two cleanups landed with it: the
-  duplicated `scan.Input` assembly collapsed into `readlayer.ToScanInput`, and dirsource's
-  double-parse (`ponytail:` debt) folded away via `manifestsource.FromWorkload`.
+## Done since the last snapshot (all 3 code milestones)
+- ✅ **Read-layer graduated** (#71) → `internal/readlayer/*`, `--from-manifests` shipped.
+- ✅ **Live cluster reader** (#72–#74, #77, #79) → `--from-cluster`. Shells out to `kubectl get`
+  rather than taking a client-go dependency: `kubeparse` already consumes that output, and kubectl
+  inherits kubeconfig auth (EKS/GKE/AKS exec plugins). Validated on a real kind cluster, which
+  **found a real bug**: `HistoryDays` measured the longest-lived *pod*, not the workload, so any
+  service that deploys daily would report ~1 day of history and be silently excluded as "<7d".
+- ✅ **PR engine** (#75, #76, #80, #81) → `pr --open`. Local git validated against real git; the
+  GitHub POST is httptest-only.
 
-## What's left (2 code milestones, both gated by environment — not by lack of work)
-1. **Live cluster reader** — real kube API `LIST` + validated PromQL. **Needs a cluster +
-   Prometheus** (and a `client-go` dependency decision; today the project is yaml.v3-only).
-   Most of the path already exists: `kubeparse` parses what a `LIST` returns, `promclient`
-   issues the query, `readlayer.ToScanInput` assembles the result. What's missing is the
-   client wrapper and the PromQL *strings* (they need a real Prometheus to validate).
-2. **Real GitHub PR creation** — git branch/commit + GitHub API; Helm/Kustomize source mapping.
-   **Needs a token + target repo + those tools.**
-After that it's a live v1.0. Plan "loops" B/C/D (launch, revenue, expansion) are business, not code.
+## What's left (2 validations + review debt — no unbuilt code)
+1. **Prove the GitHub POST.** Needs `export GITHUB_TOKEN=ghp_…` (`repo` scope) and a **scratch repo**
+   — do not test-drive PR creation against `kubeloop-` itself. Then: `pr --open` once, verify the
+   diff, close the PR. `--dry-run` already works with no token.
+2. **Prove 7-day windowing.** Needs a cluster that has been running a week. A fresh kind cluster
+   confirms metric names, labels, and the pod selector, but every workload is (correctly) excluded
+   as "<7d of history", so `[7d:5m]` behaviour stays unproven.
+3. **Review debt.** #64–#70, #75, #76, #80, #81 are live code Codex has not reviewed. Codex *is*
+   active — it caught a real `NaN`/`Inf` parsing bug in #78 — so pointing it at `internal/pr/*` is
+   the last thing before v1.0.
+
+Then tag v1.0.0. Plan "loops" B/C/D (launch, revenue, expansion) are business, not code.
 
 ## Development workflow (important — this is how the repo has been built)
 Two agents, gated by `RULEBOOK.md`:

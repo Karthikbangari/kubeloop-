@@ -18,7 +18,7 @@ import (
 	"strings"
 
 	pr "github.com/kubeloop/kubeloop/internal/pr"
-	ghclient "github.com/kubeloop/kubeloop/playground/slice-33-ghclient"
+	"github.com/kubeloop/kubeloop/internal/pr/ghclient"
 )
 
 // Git is the local git half. gitrepo.Repo implements it.

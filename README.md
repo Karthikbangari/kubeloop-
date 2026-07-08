@@ -118,7 +118,30 @@ The usage export is a JSON map keyed by `namespace/name` — see [`examples/mani
 
 A workload with no usage entry is **excluded with a printed reason**, never sized on no data. A typo in the usage file is a hard error, not a silently-dropped field.
 
-Input can also be pre-assembled scan JSON shaped like [`examples/offline-input.json`](examples/offline-input.json). The offline `pr` subcommand prepares one patched manifest file and prints a PR title/body; it does not create branches, call GitHub, or touch the cluster.
+### Opening the fix as a pull request (`pr --open`)
+
+`kubeloop pr` patches one workload's requests in your manifest. With `--out` it writes the patched file locally. With `--open` it branches, commits, pushes, and opens a pull request:
+
+```bash
+# See exactly what would happen. No token needed, nothing changes.
+kubeloop pr --from-file scan.json --manifest deploy.yaml \
+  --workload checkout-api --container app --open --dry-run
+
+export GITHUB_TOKEN=ghp_...   # needs `repo` scope
+kubeloop pr --from-file scan.json --manifest deploy.yaml \
+  --workload checkout-api --container app --open
+```
+
+What it will and won't do:
+
+- **Never writes to your cluster.** The only writes are one file in your checkout, one branch, one commit, one push, one PR.
+- **Refuses a dirty working tree**, so your uncommitted work is never swept into kubeloop's PR.
+- Commits **only** the patched manifest — never `git add .`.
+- **Never pushes to the base branch.** The branch is `kubeloop/rightsize-<ns>-<name>-<hash-of-the-patch>`: re-running the same proposal reuses it rather than littering your remote.
+- Refuses a manifest outside `--repo-dir`, and refuses to open a PR that changes nothing.
+- If the push succeeds but the PR call fails, it **tells you the branch was pushed** rather than leaving you to find it.
+
+Input can also be pre-assembled scan JSON shaped like [`examples/offline-input.json`](examples/offline-input.json).
 
 ## FAQ
 

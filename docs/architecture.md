@@ -48,6 +48,9 @@ pr ──► yaml.v3                              (PR-engine offline path:
 | `internal/readlayer/clustersource` | Live read-layer: workloads + Prometheus → `[]scan.Input`, via `readlayer.ToScanInput`. Backs `--from-cluster`. | kubeparse, manifestsource, promql, promusage, scan |
 | `internal/readlayer` | Composes inventory + usage into `scan.Input` (`ToScanInput`). Home of the future live cluster reader. | inventory, reporting, rightsizing, safety, scan |
 | `internal/pr` | PR engine offline core: find the raw YAML source file, verify and patch a target container's request YAML, compose reviewer-facing title/body, and return the prepared PR payload. | yaml.v3 |
+| `internal/pr/gitrepo` | Local git via shell-out: resolve origin, refuse a dirty tree, branch, commit one file, push. Never pushes the base branch. | — (leaf) |
+| `internal/pr/ghclient` | `POST /repos/{owner}/{repo}/pulls` over `net/http`. Creates pull requests and nothing else. Token never in a URL; scrubbed from every error. | — (leaf) |
+| `internal/pr/openpr` | Composes `pr.Prepare` → `gitrepo` → `ghclient`. The only outward-facing side effect in kubeloop. | pr, gitrepo, ghclient |
 | `cmd/kubeloop` | CLI: flags, `--from-file` / `--from-manifests` input, text + explicit-schema `--json` output. | pr, readlayer/dirsource, reporting, rightsizing, savings, scan |
 
 ## Design rules
@@ -83,8 +86,19 @@ prevents a workload from absorbing a sibling's usage (`checkout-api-.*` matched
 - **`kubectl`, not client-go** — kubeparse already consumes `kubectl get -o json`, and kubectl inherits the user's kubeconfig auth (EKS/GKE/AKS exec plugins). A hosted scanner will need an in-process client.
 - **Still unvalidated:** 7-day windowing, which needs a cluster with a week of history.
 
-## Not built yet (needs a token)
-- **Real GitHub PR creation**: `gitrepo` (local branch/commit/push, validated against real git) and `ghclient` (POST /pulls, httptest-only) exist in `playground/`. The composer and `kubeloop pr --open` are unbuilt; a live PR has never been created.
+## PR engine (built; the GitHub call itself is unvalidated)
+`kubeloop pr --open` branches, commits the patched manifest, pushes, and opens a
+pull request. The cluster is never touched; the only writes are one file, one
+branch, one commit, one push, one PR.
+
+- `internal/pr/gitrepo` — local git, **validated against real git** (a local bare repo stands in for origin: branch lands with the patch, base byte-for-byte untouched).
+- `internal/pr/ghclient` — `POST /repos/{owner}/{repo}/pulls`, plain `net/http`. **httptest-only: no request has ever reached github.com.**
+- `internal/pr/openpr` — the composer. Resolves `origin` before mutating anything; refuses a dirty tree; refuses paths escaping the checkout; pushes before asking GitHub, and reports the pushed branch if the PR call then fails.
+- `--dry-run` performs none of it.
+
+## Not validated yet
+- **7-day windowing** in the live read-layer — needs a cluster with a week of history.
+- **The GitHub POST** — needs a `repo`-scoped token and a target repository.
 - **PR engine tail**: Helm/Kustomize rendered-to-source mapping and GitHub PR creation. The offline raw-YAML locator, patcher, composer, prepare, and guards exist in `internal/pr`.
 - **Hosted tier**: continuous scans, policy-gated auto-PRs, verified-savings ledger.
 

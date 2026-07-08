@@ -9,7 +9,7 @@ import (
 	"testing"
 
 	pr "github.com/kubeloop/kubeloop/internal/pr"
-	ghclient "github.com/kubeloop/kubeloop/playground/slice-33-ghclient"
+	"github.com/kubeloop/kubeloop/internal/pr/ghclient"
 )
 
 type fakeGit struct {

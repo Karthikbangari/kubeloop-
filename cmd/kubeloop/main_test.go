@@ -2,11 +2,14 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/kubeloop/kubeloop/internal/pr/gitrepo"
 )
 
 // One rankable deployment (2000m→576m) + one CronJob that must be excluded.
@@ -488,5 +491,135 @@ func TestRun_Version(t *testing.T) {
 		if !strings.Contains(out.String(), "kubeloop") {
 			t.Errorf("Run(%q) = %q, want it to name kubeloop + version", arg, out.String())
 		}
+	}
+}
+
+// ---- `kubeloop pr --open` ----
+
+func TestRun_PRRequiresOutOrOpen(t *testing.T) {
+	dir := t.TempDir()
+	manifest := filepath.Join(dir, "d.yaml")
+	if err := os.WriteFile(manifest, []byte(prManifest), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	err := Run([]string{"pr", "--from-file", sampleFile(t), "--manifest", manifest,
+		"--workload", "checkout-api", "--container", "app"}, &bytes.Buffer{})
+	if err == nil || !strings.Contains(err.Error(), "--out") || !strings.Contains(err.Error(), "--open") {
+		t.Fatalf("want an out-or-open error, got %v", err)
+	}
+}
+
+func TestRun_PRRejectsOutAndOpenTogether(t *testing.T) {
+	dir := t.TempDir()
+	manifest := filepath.Join(dir, "d.yaml")
+	if err := os.WriteFile(manifest, []byte(prManifest), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	err := Run([]string{"pr", "--from-file", sampleFile(t), "--manifest", manifest,
+		"--workload", "checkout-api", "--container", "app",
+		"--out", filepath.Join(dir, "o.yaml"), "--open"}, &bytes.Buffer{})
+	if err == nil || !strings.Contains(err.Error(), "not both") {
+		t.Fatalf("want an either/or error, got %v", err)
+	}
+}
+
+func TestRun_PRDryRunRequiresOpen(t *testing.T) {
+	dir := t.TempDir()
+	manifest := filepath.Join(dir, "d.yaml")
+	if err := os.WriteFile(manifest, []byte(prManifest), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	err := Run([]string{"pr", "--from-file", sampleFile(t), "--manifest", manifest,
+		"--workload", "checkout-api", "--container", "app",
+		"--out", filepath.Join(dir, "o.yaml"), "--dry-run"}, &bytes.Buffer{})
+	if err == nil || !strings.Contains(err.Error(), "--dry-run applies to --open") {
+		t.Fatalf("want a dry-run misuse error, got %v", err)
+	}
+}
+
+// --open without a token must fail before any git mutation, and must say how
+// to proceed.
+func TestRun_PROpenWithoutTokenErrors(t *testing.T) {
+	t.Setenv("GITHUB_TOKEN", "")
+	t.Setenv("GH_TOKEN", "")
+	dir := t.TempDir()
+	manifest := filepath.Join(dir, "d.yaml")
+	if err := os.WriteFile(manifest, []byte(prManifest), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	err := Run([]string{"pr", "--from-file", sampleFile(t), "--manifest", manifest,
+		"--workload", "checkout-api", "--container", "app", "--open", "--repo-dir", dir}, &bytes.Buffer{})
+	if err == nil || !strings.Contains(err.Error(), "GITHUB_TOKEN") {
+		t.Fatalf("want an actionable no-token error, got %v", err)
+	}
+	if !strings.Contains(err.Error(), "--dry-run") {
+		t.Errorf("error should point at --dry-run: %v", err)
+	}
+}
+
+// A dry run against a real git checkout needs no token and must change nothing:
+// no branch, no commit, and the manifest untouched.
+func TestRun_PROpenDryRunChangesNothing(t *testing.T) {
+	t.Setenv("GITHUB_TOKEN", "")
+	t.Setenv("GH_TOKEN", "")
+	repo := t.TempDir()
+	git := func(args ...string) {
+		t.Helper()
+		if _, err := gitrepo.ExecRunner(context.Background(), repo, args...); err != nil {
+			t.Fatalf("git %v: %v", args, err)
+		}
+	}
+	git("init", "--initial-branch=main", ".")
+	git("config", "user.email", "t@e.com")
+	git("config", "user.name", "T")
+	git("remote", "add", "origin", "https://github.com/Karthikbangari/kubeloop-.git")
+	if err := os.WriteFile(filepath.Join(repo, "d.yaml"), []byte(prManifest), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	git("add", "d.yaml")
+	git("commit", "-m", "seed")
+
+	var out bytes.Buffer
+	err := Run([]string{"pr", "--from-file", sampleFile(t), "--manifest", filepath.Join(repo, "d.yaml"),
+		"--workload", "checkout-api", "--container", "app",
+		"--open", "--dry-run", "--repo-dir", repo}, &out)
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := out.String()
+	for _, want := range []string{"Dry run", "Would branch: kubeloop/rightsize-shop-checkout-api-", "Would open:"} {
+		if !strings.Contains(s, want) {
+			t.Errorf("dry-run output missing %q:\n%s", want, s)
+		}
+	}
+	// Nothing changed: still on main, no new branch, manifest byte-identical.
+	b, _ := gitrepo.ExecRunner(context.Background(), repo, "rev-parse", "--abbrev-ref", "HEAD")
+	if strings.TrimSpace(string(b)) != "main" {
+		t.Errorf("dry run switched branches to %q", b)
+	}
+	br, _ := gitrepo.ExecRunner(context.Background(), repo, "branch", "--list")
+	if strings.Contains(string(br), "kubeloop/") {
+		t.Errorf("dry run created a branch: %q", br)
+	}
+	got, _ := os.ReadFile(filepath.Join(repo, "d.yaml"))
+	if string(got) != prManifest {
+		t.Error("dry run modified the manifest")
+	}
+}
+
+// A manifest outside --repo-dir must be refused by name: kubeloop would
+// otherwise be asked to commit a file the repository does not contain.
+func TestRun_PROpenRefusesManifestOutsideRepo(t *testing.T) {
+	t.Setenv("GITHUB_TOKEN", "")
+	repo := t.TempDir()
+	outside := filepath.Join(t.TempDir(), "d.yaml")
+	if err := os.WriteFile(outside, []byte(prManifest), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	err := Run([]string{"pr", "--from-file", sampleFile(t), "--manifest", outside,
+		"--workload", "checkout-api", "--container", "app",
+		"--open", "--dry-run", "--repo-dir", repo}, &bytes.Buffer{})
+	if err == nil || !strings.Contains(err.Error(), "not inside --repo-dir") {
+		t.Fatalf("want an outside-repo error, got %v", err)
 	}
 }

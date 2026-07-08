@@ -43,3 +43,6 @@ Graduated:
 - `slice-29-kubeclient/` moved to `../internal/readlayer/kubeclient/`.
 - `slice-30-promql/` moved to `../internal/readlayer/promql/`.
 - `slice-31-clustersource/` moved to `../internal/readlayer/clustersource/`; the three back the CLI's `--from-cluster` mode.
+- `slice-32-gitrepo/` moved to `../internal/pr/gitrepo/`.
+- `slice-33-ghclient/` moved to `../internal/pr/ghclient/`.
+- `slice-34-openpr/` moved to `../internal/pr/openpr/`; the three back the CLI's `pr --open` mode.
