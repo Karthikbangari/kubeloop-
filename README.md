@@ -22,7 +22,7 @@ Excluded:
   - new-svc: only 3d usage history (<7d) — not enough signal
 ```
 
-Current v0.1 is offline and read-only: it takes workload input from JSON, computes conservative request recommendations, ranks directional monthly waste, and can emit text or a stable JSON schema. The live Kubernetes/Prometheus reader and PR engine are next layers, not hidden side effects.
+Current v1.0 is a local, read-only scanner plus a GitHub PR workflow: it can read pre-assembled JSON, raw Kubernetes manifest exports, or a live cluster via `kubectl get` + Prometheus; it computes conservative request recommendations, ranks directional monthly waste, and can open a human-reviewed pull request. It never writes to a cluster.
 
 ---
 
@@ -30,10 +30,10 @@ Current v0.1 is offline and read-only: it takes workload input from JSON, comput
 
 [Robusta KRR](https://github.com/robusta-dev/krr) is excellent at computing the right numbers, and kubeloop can use it as a future recommendation engine. What kubeloop is building around the numbers:
 
-**KRR tells you the right numbers. kubeloop ranks the waste today; the next layers get fixes merged and prove savings.**
+**KRR tells you the right numbers. kubeloop ranks the waste, opens the fix as a PR, and leaves bill-level proof to the hosted loop.**
 
 - **Dollars, ranked.** Millicores don't get budget approved; "$131/month on checkout-api" does.
-- **Through Git, not around it.** Some tools patch pods via admission webhook (your manifest says 2000m, the pod runs 492m — Git is now lying). Others change the cluster directly and your GitOps controller reverts them on the next sync. The planned PR engine will open reviewed, versioned, audited changes against your repo. AWS published this exact PR-based pattern as the GitOps-safe approach — kubeloop is building that pattern as one binary instead of a five-service pipeline.
+- **Through Git, not around it.** Some tools patch pods via admission webhook (your manifest says 2000m, the pod runs 492m — Git is now lying). Others change the cluster directly and your GitOps controller reverts them on the next sync. kubeloop opens reviewed, versioned, audited changes against your repo. AWS published this exact PR-based pattern as the GitOps-safe approach — kubeloop packages that pattern as one binary instead of a five-service pipeline.
 - **Proof, not promises.** The planned hosted tier measures your bill before and after each merged PR and keeps a verified-savings ledger.
 
 Full comparison: [KRR vs kubeloop](docs/krr-vs-kubeloop.md) · [OpenCost vs kubeloop](docs/opencost-vs-kubeloop.md)

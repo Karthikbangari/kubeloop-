@@ -33,6 +33,14 @@ When Claude Code adds, pushes, or changes anything, Codex automatically checks `
 ## Log
 Newest first. One entry per playground change.
 
+### #88 — 2026-07-09 — Codex review: #86/#87 updates + release-doc consistency
+- **Review scope:** checked the new Windows hard-link implementation (#86), the real GitHub PR validation report (#87), the module rename to `github.com/Karthikbangari/kubeloop-`, and the release-facing docs.
+- **Verdict on #86:** approved with the documented caveat. The Windows hard-link check now fails closed instead of silently no-oping, uses a metadata-only handle, and is compile/vet verified for `GOOS=windows`. It still has not executed on Windows, so the remaining risk is a false refusal on Windows, not an unsafe overwrite.
+- **Verdict on #87:** approved. The first real 201 GitHub success path was correctly aimed at a throwaway repo, verified from GitHub's side, and cleaned up. No product code changed in that validation.
+- **Docs fixed during review:** README still described v0.1 as offline-only and called the PR engine "planned"; architecture still said the GitHub call was unvalidated; HANDOFF still used the old module path and pre-#87 status. Updated those to match the current shipped behavior and remaining risk.
+- **Verified:** `make ci` green; `GOOS=windows GOARCH=amd64 go vet ./internal/pr/openpr` green; `GOOS=windows GOARCH=amd64 go test -c ./internal/pr/openpr` green; no stale `github.com/kubeloop/kubeloop` imports in Go files or `go.mod`.
+- **Codex status:** ✅ #86/#87 approved. Remaining non-doc gap: 7-day Prometheus windowing; remaining review marker: #79 CLI wiring.
+
 ### #87 — 2026-07-08 — LIVE VALIDATION: `pr --open` opened a real pull request on GitHub. The last ⚠ is closed.
 - **Setup:** the user authorised reading the PAT that `osxkeychain` already stores for `github.com` (used implicitly by every `git push` this session) — held in a shell variable for the API calls, never printed, echoed, logged, or written to disk. Scopes confirmed read-only first: `repo` present, `delete_repo` **absent**. Target was a **throwaway private repo** (`Karthikbangari/kubeloop-prtest`), not `kubeloop-` — five consecutive review rounds (#82–#86) each found an escape in this exact code path, and a sixth belonged in a scratch repo.
 - **Result: `kubeloop pr --open` created pull request #1.** The 201 success path — the one thing five rounds of review and every httptest could not prove — now works against the real `api.github.com`.
@@ -45,7 +53,7 @@ Newest first. One entry per playground change.
 - **Idempotence proved live:** re-running the identical proposal did **not** open a second PR or push a second branch — the content-keyed branch name collided. (Nit: it fails with a raw `git checkout -b … already exists` rather than ghclient's friendlier "a pull request for this branch may already be open", because the collision is caught locally before GitHub is reached. Correct behaviour, unpolished message.)
 - **Cleanup:** PR #1 closed, remote branch deleted (HTTP 204), temp clone removed. `kubeloop-prtest` ends with `branches: ['main']` and one closed PR. The repo itself **could not be deleted** — the token lacks `delete_repo` — so it must be removed by hand.
 - **Every external gap in the product is now closed except one**, and that one is not closeable by code: 7-day windowing needs a cluster with a week of history.
-- **Codex status:** ⬜ awaiting review (validation only; no product code changed).
+- **Codex status:** ✅ approved after Codex follow-up #88.
 
 ### #86 — 2026-07-08 — SECURITY: #85's hard-link guard silently did nothing on Windows (a shipped platform)
 - **Verified Codex's #85 first, independently.** Its finding is real and its fix works: a hard link is a regular file inside the repo *and* another name outside it, sharing one inode, so `Lstat` and `EvalSymlinks` are both blind to it and writing the repo path mutates the outside file. Reproduced the attack — refused, outside file byte-for-byte unchanged — and confirmed a plain manifest (`Nlink==1`) is still allowed, i.e. no false positive.
@@ -58,7 +66,7 @@ Newest first. One entry per playground change.
 - **Verified:** `gofmt` clean; builds for all six GoReleaser targets (`{linux,darwin,windows}×{amd64,arm64}`); `GOOS=windows go vet ./internal/pr/openpr/` clean (catches bad `syscall` usage); unix behaviour unchanged — 19 openpr tests green, `make ci` green (24 packages).
 - **Pattern worth naming:** #82 → #83 → #84 → #85 → #86, five rounds on one function, each finding an escape the previous guard missed (lexical → symlinked leaf → symlinked parent → `.git` → hard link → platform no-op). Every one was found by *writing the attack first*, and two were in a reviewer's own fix. `patchTarget` is the highest-risk function in the codebase and should be treated that way.
 - **Files:** `internal/pr/openpr/{openpr.go,hardlink_unix.go,hardlink_windows.go,hardlink_other.go}`.
-- **Codex status:** ⬜ awaiting review.
+- **Codex status:** ✅ approved after Codex follow-up #88.
 
 ### #85 — 2026-07-08 — Codex review: openpr hard-link guard before token work
 - **Review scope:** fresh Codex pass over `internal/pr/openpr` before any valid GitHub token is used. Re-read the current path guards, side-effect ordering, real-git tests, and CLI composition.

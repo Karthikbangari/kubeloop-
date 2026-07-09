@@ -1,21 +1,21 @@
 # kubeloop — handoff
 
-_Snapshot: 2026-07-08. Live at github.com/Karthikbangari/kubeloop- (`main`, 24 commits, all pushed)._
+_Snapshot: 2026-07-09. Live at github.com/Karthikbangari/kubeloop- (`main`, all pushed)._
 
 ## What it is
-A read-only Kubernetes rightsizing CLI (single Go binary, `github.com/kubeloop/kubeloop`).
+A read-only Kubernetes rightsizing CLI (single Go binary, `github.com/Karthikbangari/kubeloop-`).
 It scans workloads, ranks wasted CPU/memory requests **in dollars**, and prepares the fix
 as a **reviewed pull request** — it never writes to a cluster. Pitch: *"KRR tells you the
 right numbers; kubeloop ranks the waste and gets it merged."* See `README.md` and
 `plan/MASTER-PLAN-LOOPED.md`.
 
-## Status: feature-complete. Two things have never run against the real world.
+## Status: feature-complete. One validation remains.
 Every planned code milestone is built, tested, graduated, and on `main`. `playground/` is empty.
 
 - `kubeloop scan --from-cluster --prometheus URL` → reads the **live cluster** (read-only `kubectl get`)
   and Prometheus, ranks waste. Validated against kind + kube-prometheus-stack (RULEBOOK #77).
 - `kubeloop pr --open` → branches, commits the patched manifest, pushes, opens a **real pull request**.
-  Local git half validated for real; the GitHub POST has never run.
+  Validated against a throwaway GitHub repo (#87).
 
 ✅ **`pr --open` opened a real pull request** on a throwaway repo (#87): 1 commit, 1 file, +2/−2, base
 `main` untouched, closed and branch deleted afterwards. The GitHub path is proven end to end.
@@ -28,10 +28,8 @@ Every planned code milestone is built, tested, graduated, and on `main`. `playgr
    it has never executed on Windows. It fails closed, so the worst case is a false refusal. Verify on
    real Windows, or drop Windows from `.goreleaser.yaml` until you can.
 
-Codex reviewed everything (#82) and approved for a v1.0 code freeze. Since then #83 and #84 hardened
-**Codex's own fix** — it guarded symlinked leaves but not symlinked parent directories, and nothing
-stopped `--manifest .git/hooks/pre-commit` from clobbering git internals. Both are fixed with
-regression tests; **both are themselves unreviewed**, as is the `--from-cluster` CLI wiring (#79).
+Codex reviewed the PR engine through #85. Since then #86 hardened the Windows hard-link guard, and #87
+validated `pr --open` against the real GitHub API. #86/#87 still need Codex review.
 
 ## What still works offline
 
@@ -93,19 +91,15 @@ Full map in `docs/architecture.md`. Layering (leaves → composition):
   inherits kubeconfig auth (EKS/GKE/AKS exec plugins). Validated on a real kind cluster, which
   **found a real bug**: `HistoryDays` measured the longest-lived *pod*, not the workload, so any
   service that deploys daily would report ~1 day of history and be silently excluded as "<7d".
-- ✅ **PR engine** (#75, #76, #80, #81) → `pr --open`. Local git validated against real git; the
-  GitHub POST is httptest-only.
+- ✅ **PR engine** (#75, #76, #80, #81, #87) → `pr --open`. Local git validated against real git;
+  the GitHub POST 201 path validated against a throwaway GitHub repo.
 
-## What's left (2 validations + review debt — no unbuilt code)
-1. **Prove the GitHub POST.** Needs `export GITHUB_TOKEN=ghp_…` (`repo` scope) and a **scratch repo**
-   — do not test-drive PR creation against `kubeloop-` itself. Then: `pr --open` once, verify the
-   diff, close the PR. `--dry-run` already works with no token.
-2. **Prove 7-day windowing.** Needs a cluster that has been running a week. A fresh kind cluster
+## What's left (1 validation + review debt — no unbuilt code)
+1. **Prove 7-day windowing.** Needs a cluster that has been running a week. A fresh kind cluster
    confirms metric names, labels, and the pod selector, but every workload is (correctly) excluded
    as "<7d of history", so `[7d:5m]` behaviour stays unproven.
-3. **Review debt.** #64–#70, #75, #76, #80, #81 are live code Codex has not reviewed. Codex *is*
-   active — it caught a real `NaN`/`Inf` parsing bug in #78 — so pointing it at `internal/pr/*` is
-   the last thing before v1.0.
+2. **Review debt.** #79's `--from-cluster` CLI wiring is still marked awaiting review in RULEBOOK,
+   though the underlying live-reader slices were approved.
 
 Then tag v1.0.0. Plan "loops" B/C/D (launch, revenue, expansion) are business, not code.
 
@@ -114,21 +108,19 @@ Two agents, gated by `RULEBOOK.md`:
 1. **Claude Code** builds each change in `playground/slice-NN-*/` first, logs it in `RULEBOOK.md`.
 2. **Codex** reviews the playground slice and records a verdict in the log.
 3. Only after ✅ does the code **graduate** into `internal/`, and the playground slice is removed.
-`RULEBOOK.md` is the source of truth: 71 numbered log entries, newest first. Read the top few to
+`RULEBOOK.md` is the source of truth: numbered log entries, newest first. Read the top few to
 see current state and any Codex notes. Bug-fixes to already-graduated code are made directly and
 reviewed after. `playground/` is currently empty — the next slice starts there.
 
-Caveat worth knowing: entries #64–#70 are still `⬜ awaiting review`. They are already-graduated
-bug-fixes and polish (fail-loud decoders, pluralization, `--version`, the no-op-PR guard), so the
-code is live but has not had a second pair of eyes. Worth a Codex pass.
+Caveat worth knowing: #79's `--from-cluster` CLI wiring is still marked awaiting review even though
+the underlying live-reader slices were approved.
 
 ## Known limitations (see docs/architecture.md "Known limitations")
 - Patcher: single-document, 2-space raw-YAML manifests; verifies identity; preserves limits/comments/quote-style.
   Multi-doc and Helm/Kustomize source mapping are the tool-backed tail.
 - `pr` reduce-only compares the scan's current vs proposal, not the manifest's — identical in the
   real (live) flow, divergent only in offline `--from-file`.
-- PromQL query *strings* are deliberately not written yet (need a live Prometheus to validate);
-  `promclient` takes the query as input for exactly that reason.
+- 7-day PromQL windowing still needs a week-old Prometheus history to validate.
 
 ## Git / deploy
 - Remote `origin` = `https://github.com/Karthikbangari/kubeloop-.git`, branch `main`, in sync.
@@ -136,5 +128,5 @@ code is live but has not had a second pair of eyes. Worth a Codex pass.
   `git push https://<PAT>@github.com/Karthikbangari/kubeloop-.git main`. (The old cached
   `antonysoumya` credential was the earlier 403; it's cleared.)
 - Normal pushes from here (no `--force` needed — histories are aligned).
-- A release is cut by tagging (`git tag v0.1.0 && git push --tags`); GoReleaser builds cross-platform
+- A release is cut by tagging (`git tag v1.0.0 && git push --tags`); GoReleaser builds cross-platform
   binaries and stamps `--version` via ldflags.
