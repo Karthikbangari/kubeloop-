@@ -12,7 +12,7 @@ import (
 	"fmt"
 	"strings"
 
-	rs "github.com/kubeloop/kubeloop/internal/rightsizing"
+	rs "github.com/Karthikbangari/kubeloop-/internal/rightsizing"
 )
 
 // Meta is the workload metadata that governs exclusion and confidence,

@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	rs "github.com/kubeloop/kubeloop/internal/rightsizing"
+	rs "github.com/Karthikbangari/kubeloop-/internal/rightsizing"
 )
 
 // stable is a healthy usage sample (real CPU + memory signal) so Assess tests

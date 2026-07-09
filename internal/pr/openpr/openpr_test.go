@@ -8,8 +8,8 @@ import (
 	"strings"
 	"testing"
 
-	pr "github.com/kubeloop/kubeloop/internal/pr"
-	"github.com/kubeloop/kubeloop/internal/pr/ghclient"
+	pr "github.com/Karthikbangari/kubeloop-/internal/pr"
+	"github.com/Karthikbangari/kubeloop-/internal/pr/ghclient"
 )
 
 type fakeGit struct {

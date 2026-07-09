@@ -4,7 +4,7 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/kubeloop/kubeloop/internal/inventory"
+	"github.com/Karthikbangari/kubeloop-/internal/inventory"
 )
 
 const deploy = `{

@@ -1,4 +1,4 @@
-module github.com/kubeloop/kubeloop
+module github.com/Karthikbangari/kubeloop-
 
 go 1.23
 

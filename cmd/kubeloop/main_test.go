@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/kubeloop/kubeloop/internal/pr/gitrepo"
+	"github.com/Karthikbangari/kubeloop-/internal/pr/gitrepo"
 )
 
 // One rankable deployment (2000m→576m) + one CronJob that must be excluded.

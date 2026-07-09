@@ -7,8 +7,8 @@ import (
 	"strings"
 	"testing"
 
-	pr "github.com/kubeloop/kubeloop/internal/pr"
-	"github.com/kubeloop/kubeloop/internal/pr/gitrepo"
+	pr "github.com/Karthikbangari/kubeloop-/internal/pr"
+	"github.com/Karthikbangari/kubeloop-/internal/pr/gitrepo"
 )
 
 // realGit is the real gitrepo.Repo with only OriginRepo stubbed: a local bare

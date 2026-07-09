@@ -3,10 +3,10 @@ package readlayer
 import (
 	"testing"
 
-	"github.com/kubeloop/kubeloop/internal/inventory"
-	rs "github.com/kubeloop/kubeloop/internal/rightsizing"
-	"github.com/kubeloop/kubeloop/internal/savings"
-	"github.com/kubeloop/kubeloop/internal/scan"
+	"github.com/Karthikbangari/kubeloop-/internal/inventory"
+	rs "github.com/Karthikbangari/kubeloop-/internal/rightsizing"
+	"github.com/Karthikbangari/kubeloop-/internal/savings"
+	"github.com/Karthikbangari/kubeloop-/internal/scan"
 )
 
 func TestToScanInputs_AssemblesRequestsRuntimeAndUsage(t *testing.T) {

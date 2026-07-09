@@ -11,11 +11,11 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/kubeloop/kubeloop/internal/readlayer/kubeparse"
-	"github.com/kubeloop/kubeloop/internal/readlayer/manifestsource"
-	"github.com/kubeloop/kubeloop/internal/readlayer/promql"
-	"github.com/kubeloop/kubeloop/internal/readlayer/promusage"
-	"github.com/kubeloop/kubeloop/internal/scan"
+	"github.com/Karthikbangari/kubeloop-/internal/readlayer/kubeparse"
+	"github.com/Karthikbangari/kubeloop-/internal/readlayer/manifestsource"
+	"github.com/Karthikbangari/kubeloop-/internal/readlayer/promql"
+	"github.com/Karthikbangari/kubeloop-/internal/readlayer/promusage"
+	"github.com/Karthikbangari/kubeloop-/internal/scan"
 )
 
 // Querier issues one Prometheus instant query. promclient.Client implements it.

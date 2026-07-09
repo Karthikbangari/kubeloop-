@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	pr "github.com/kubeloop/kubeloop/internal/pr"
+	pr "github.com/Karthikbangari/kubeloop-/internal/pr"
 )
 
 func TestOpen_RefusesHardlinkedTarget(t *testing.T) {

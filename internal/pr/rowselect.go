@@ -3,7 +3,7 @@ package pr
 import (
 	"fmt"
 
-	rp "github.com/kubeloop/kubeloop/internal/reporting"
+	rp "github.com/Karthikbangari/kubeloop-/internal/reporting"
 )
 
 // FindRow returns the single row matching name (and namespace, if given). It

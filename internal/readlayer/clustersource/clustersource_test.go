@@ -9,13 +9,13 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/kubeloop/kubeloop/internal/inventory"
-	"github.com/kubeloop/kubeloop/internal/readlayer/kubeparse"
-	"github.com/kubeloop/kubeloop/internal/readlayer/promclient"
-	"github.com/kubeloop/kubeloop/internal/readlayer/promql"
-	rs "github.com/kubeloop/kubeloop/internal/rightsizing"
-	"github.com/kubeloop/kubeloop/internal/savings"
-	"github.com/kubeloop/kubeloop/internal/scan"
+	"github.com/Karthikbangari/kubeloop-/internal/inventory"
+	"github.com/Karthikbangari/kubeloop-/internal/readlayer/kubeparse"
+	"github.com/Karthikbangari/kubeloop-/internal/readlayer/promclient"
+	"github.com/Karthikbangari/kubeloop-/internal/readlayer/promql"
+	rs "github.com/Karthikbangari/kubeloop-/internal/rightsizing"
+	"github.com/Karthikbangari/kubeloop-/internal/savings"
+	"github.com/Karthikbangari/kubeloop-/internal/scan"
 )
 
 // promclient is the real Querier this package is built for.

@@ -3,9 +3,9 @@ package manifestsource
 import (
 	"testing"
 
-	rs "github.com/kubeloop/kubeloop/internal/rightsizing"
-	"github.com/kubeloop/kubeloop/internal/savings"
-	"github.com/kubeloop/kubeloop/internal/scan"
+	rs "github.com/Karthikbangari/kubeloop-/internal/rightsizing"
+	"github.com/Karthikbangari/kubeloop-/internal/savings"
+	"github.com/Karthikbangari/kubeloop-/internal/scan"
 )
 
 const deploy = `{

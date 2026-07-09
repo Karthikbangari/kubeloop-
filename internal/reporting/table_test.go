@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	rs "github.com/kubeloop/kubeloop/internal/rightsizing"
+	rs "github.com/Karthikbangari/kubeloop-/internal/rightsizing"
 )
 
 func approx(a, b float64) bool { return a-b < 0.01 && b-a < 0.01 }

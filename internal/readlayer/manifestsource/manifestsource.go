@@ -6,10 +6,10 @@
 package manifestsource
 
 import (
-	"github.com/kubeloop/kubeloop/internal/readlayer"
-	"github.com/kubeloop/kubeloop/internal/readlayer/kubeparse"
-	rs "github.com/kubeloop/kubeloop/internal/rightsizing"
-	"github.com/kubeloop/kubeloop/internal/scan"
+	"github.com/Karthikbangari/kubeloop-/internal/readlayer"
+	"github.com/Karthikbangari/kubeloop-/internal/readlayer/kubeparse"
+	rs "github.com/Karthikbangari/kubeloop-/internal/rightsizing"
+	"github.com/Karthikbangari/kubeloop-/internal/scan"
 )
 
 // FromWorkload pairs an already-parsed workload with its observed usage +

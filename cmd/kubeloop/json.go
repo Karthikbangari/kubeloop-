@@ -1,9 +1,9 @@
 package main
 
 import (
-	rp "github.com/kubeloop/kubeloop/internal/reporting"
-	"github.com/kubeloop/kubeloop/internal/savings"
-	"github.com/kubeloop/kubeloop/internal/scan"
+	rp "github.com/Karthikbangari/kubeloop-/internal/reporting"
+	"github.com/Karthikbangari/kubeloop-/internal/savings"
+	"github.com/Karthikbangari/kubeloop-/internal/scan"
 )
 
 // jsonReport is the explicit, stable wire format for --json. It is intentionally

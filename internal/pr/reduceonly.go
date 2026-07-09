@@ -1,6 +1,6 @@
 package pr
 
-import rs "github.com/kubeloop/kubeloop/internal/rightsizing"
+import rs "github.com/Karthikbangari/kubeloop-/internal/rightsizing"
 
 // Reductions returns the CPU and memory to patch: the proposed value when it
 // reduces the current request, else 0 (don't change that resource).

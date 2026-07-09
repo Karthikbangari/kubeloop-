@@ -3,7 +3,7 @@ package classify
 import (
 	"testing"
 
-	rs "github.com/kubeloop/kubeloop/internal/rightsizing"
+	rs "github.com/Karthikbangari/kubeloop-/internal/rightsizing"
 )
 
 func TestClassify(t *testing.T) {

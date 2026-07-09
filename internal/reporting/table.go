@@ -8,8 +8,8 @@ import (
 	"strings"
 	"text/tabwriter"
 
-	"github.com/kubeloop/kubeloop/internal/labels"
-	rs "github.com/kubeloop/kubeloop/internal/rightsizing"
+	"github.com/Karthikbangari/kubeloop-/internal/labels"
+	rs "github.com/Karthikbangari/kubeloop-/internal/rightsizing"
 )
 
 // Workload is one scanned workload with its current requests and observed usage.

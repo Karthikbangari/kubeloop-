@@ -3,7 +3,7 @@ package promusage
 import (
 	"testing"
 
-	rs "github.com/kubeloop/kubeloop/internal/rightsizing"
+	rs "github.com/Karthikbangari/kubeloop-/internal/rightsizing"
 )
 
 const okResp = `{"status":"success","data":{"resultType":"vector","result":[{"metric":{"pod":"api-abc"},"value":[1720200000,"0.41"]}]}}`

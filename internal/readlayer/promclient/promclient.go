@@ -14,7 +14,7 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/kubeloop/kubeloop/internal/readlayer/promusage"
+	"github.com/Karthikbangari/kubeloop-/internal/readlayer/promusage"
 )
 
 // Client talks to a Prometheus HTTP API. Read-only: it only issues GET queries.

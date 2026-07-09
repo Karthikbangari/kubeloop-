@@ -8,10 +8,10 @@ package dirsource
 import (
 	"fmt"
 
-	"github.com/kubeloop/kubeloop/internal/readlayer/kubeparse"
-	"github.com/kubeloop/kubeloop/internal/readlayer/manifestsource"
-	rs "github.com/kubeloop/kubeloop/internal/rightsizing"
-	"github.com/kubeloop/kubeloop/internal/scan"
+	"github.com/Karthikbangari/kubeloop-/internal/readlayer/kubeparse"
+	"github.com/Karthikbangari/kubeloop-/internal/readlayer/manifestsource"
+	rs "github.com/Karthikbangari/kubeloop-/internal/rightsizing"
+	"github.com/Karthikbangari/kubeloop-/internal/scan"
 )
 
 // Usage is a workload's observed usage plus its history-day count.

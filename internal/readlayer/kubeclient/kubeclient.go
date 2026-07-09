@@ -25,7 +25,7 @@ import (
 	"os/exec"
 	"strings"
 
-	"github.com/kubeloop/kubeloop/internal/readlayer/kubeparse"
+	"github.com/Karthikbangari/kubeloop-/internal/readlayer/kubeparse"
 )
 
 // listKinds are the workload kinds kubeloop sizes, as kubectl resource names

@@ -12,7 +12,7 @@ import (
 	"math"
 	"strconv"
 
-	rs "github.com/kubeloop/kubeloop/internal/rightsizing"
+	rs "github.com/Karthikbangari/kubeloop-/internal/rightsizing"
 )
 
 // instantResponse is the subset of Prometheus GET /api/v1/query we read: a

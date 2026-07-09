@@ -8,12 +8,12 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/kubeloop/kubeloop/internal/classify"
-	"github.com/kubeloop/kubeloop/internal/labels"
-	rp "github.com/kubeloop/kubeloop/internal/reporting"
-	rs "github.com/kubeloop/kubeloop/internal/rightsizing"
-	sf "github.com/kubeloop/kubeloop/internal/safety"
-	"github.com/kubeloop/kubeloop/internal/savings"
+	"github.com/Karthikbangari/kubeloop-/internal/classify"
+	"github.com/Karthikbangari/kubeloop-/internal/labels"
+	rp "github.com/Karthikbangari/kubeloop-/internal/reporting"
+	rs "github.com/Karthikbangari/kubeloop-/internal/rightsizing"
+	sf "github.com/Karthikbangari/kubeloop-/internal/safety"
+	"github.com/Karthikbangari/kubeloop-/internal/savings"
 )
 
 // Input is one workload plus the metadata safety needs to judge it.

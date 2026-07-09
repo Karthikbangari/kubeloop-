@@ -3,7 +3,7 @@ package inventory
 import (
 	"testing"
 
-	rs "github.com/kubeloop/kubeloop/internal/rightsizing"
+	rs "github.com/Karthikbangari/kubeloop-/internal/rightsizing"
 )
 
 func TestDetectRuntime_JVMImageOrCommand(t *testing.T) {

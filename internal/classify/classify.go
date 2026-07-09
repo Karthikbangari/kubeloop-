@@ -6,7 +6,7 @@
 // report from listing a scary "raise this to 2880m" line at $0.
 package classify
 
-import rs "github.com/kubeloop/kubeloop/internal/rightsizing"
+import rs "github.com/Karthikbangari/kubeloop-/internal/rightsizing"
 
 // Class is how a proposal relates to the current request.
 type Class int

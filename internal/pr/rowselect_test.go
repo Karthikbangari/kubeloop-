@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	rp "github.com/kubeloop/kubeloop/internal/reporting"
+	rp "github.com/Karthikbangari/kubeloop-/internal/reporting"
 )
 
 func rows() []rp.Row {

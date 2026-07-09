@@ -8,8 +8,8 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/kubeloop/kubeloop/internal/inventory"
-	"github.com/kubeloop/kubeloop/internal/readlayer/quantityparse"
+	"github.com/Karthikbangari/kubeloop-/internal/inventory"
+	"github.com/Karthikbangari/kubeloop-/internal/readlayer/quantityparse"
 )
 
 // Workload is one parsed object: identity plus its containers, ready for

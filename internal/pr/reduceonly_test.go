@@ -3,7 +3,7 @@ package pr
 import (
 	"testing"
 
-	rs "github.com/kubeloop/kubeloop/internal/rightsizing"
+	rs "github.com/Karthikbangari/kubeloop-/internal/rightsizing"
 )
 
 const Mi = 1024 * 1024

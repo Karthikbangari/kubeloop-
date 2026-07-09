@@ -8,7 +8,7 @@ package inventory
 import (
 	"strings"
 
-	rs "github.com/kubeloop/kubeloop/internal/rightsizing"
+	rs "github.com/Karthikbangari/kubeloop-/internal/rightsizing"
 )
 
 // Container is one container as the read-layer sees it: identity (image/command,

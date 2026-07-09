@@ -66,7 +66,13 @@ sudo mv kubeloop /usr/local/bin/
 kubeloop --version
 ```
 
-Or build from source (Go 1.23+):
+Or install from source with Go 1.23+:
+
+```bash
+go install github.com/Karthikbangari/kubeloop-/cmd/kubeloop@latest
+```
+
+Or build from a clone:
 
 ```bash
 git clone https://github.com/Karthikbangari/kubeloop-.git

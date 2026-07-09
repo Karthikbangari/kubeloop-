@@ -17,8 +17,8 @@ import (
 	"regexp"
 	"strings"
 
-	pr "github.com/kubeloop/kubeloop/internal/pr"
-	"github.com/kubeloop/kubeloop/internal/pr/ghclient"
+	pr "github.com/Karthikbangari/kubeloop-/internal/pr"
+	"github.com/Karthikbangari/kubeloop-/internal/pr/ghclient"
 )
 
 // Git is the local git half. gitrepo.Repo implements it.

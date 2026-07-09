@@ -7,7 +7,7 @@ import (
 	"io"
 	"os"
 
-	rs "github.com/kubeloop/kubeloop/internal/rightsizing"
+	rs "github.com/Karthikbangari/kubeloop-/internal/rightsizing"
 )
 
 // Per-unit prices are derived from readable on-demand rates so the numbers are

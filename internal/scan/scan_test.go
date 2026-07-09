@@ -4,10 +4,10 @@ import (
 	"strings"
 	"testing"
 
-	rp "github.com/kubeloop/kubeloop/internal/reporting"
-	rs "github.com/kubeloop/kubeloop/internal/rightsizing"
-	sf "github.com/kubeloop/kubeloop/internal/safety"
-	"github.com/kubeloop/kubeloop/internal/savings"
+	rp "github.com/Karthikbangari/kubeloop-/internal/reporting"
+	rs "github.com/Karthikbangari/kubeloop-/internal/rightsizing"
+	sf "github.com/Karthikbangari/kubeloop-/internal/safety"
+	"github.com/Karthikbangari/kubeloop-/internal/savings"
 )
 
 func approx(a, b float64) bool { return a-b < 0.01 && b-a < 0.01 }
