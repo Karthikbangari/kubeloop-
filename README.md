@@ -55,6 +55,26 @@ One bad recommendation that OOM-kills a production pod would end this project's 
 - Memory-sensitive runtimes (JVM etc.) get a caution flag, not a confident number.
 - The CLI is **read-only**. The only write path is a pull request that a human reviews and merges.
 
+## Install
+
+Download a prebuilt binary for your platform from the [latest release](https://github.com/Karthikbangari/kubeloop-/releases/latest) (Linux, macOS, and Windows; amd64 and arm64), then extract and put it on your `PATH`:
+
+```bash
+# macOS/Linux example — adjust the version, OS, and arch to the asset name
+tar -xzf kubeloop_1.0.0_darwin_arm64.tar.gz
+sudo mv kubeloop /usr/local/bin/
+kubeloop --version
+```
+
+Or build from source (Go 1.23+):
+
+```bash
+git clone https://github.com/Karthikbangari/kubeloop-.git
+cd kubeloop-
+go build -o bin/kubeloop ./cmd/kubeloop
+./bin/kubeloop --version
+```
+
 ## Build
 
 ```bash
@@ -145,9 +165,9 @@ Input can also be pre-assembled scan JSON shaped like [`examples/offline-input.j
 
 ## FAQ
 
-**How is this different from KRR?** KRR computes recommendations; kubeloop turns recommendations into dollar-ranked reports today, with merged and verified Git changes planned next. Run both — see the [comparison](docs/krr-vs-kubeloop.md).
+**How is this different from KRR?** KRR computes recommendations; kubeloop turns recommendations into dollar-ranked reports and opens the fix as a reviewed pull request. Run both — see the [comparison](docs/krr-vs-kubeloop.md).
 
-**Does my data leave the cluster?** No. Current v0.1 reads a local JSON file and prints locally. The future live scan will run against your APIs locally; no phone-home.
+**Does my data leave the cluster?** No. kubeloop reads from your cluster and Prometheus over your existing local credentials and prints locally; there is no phone-home. `--from-cluster` only ever runs `kubectl get` (read-only), and the only write path is a pull request you review.
 
 **Why PRs instead of auto-apply?** Because your GitOps controller reverts in-cluster changes, and webhook workarounds make Git lie about what's running. A PR is the change mechanism your team already trusts.
 
@@ -157,8 +177,9 @@ Input can also be pre-assembled scan JSON shaped like [`examples/offline-input.j
 
 - [x] Read-only scan: dollar-ranked CPU/memory waste
 - [x] Offline PR preparation: raw YAML patch + reviewer-facing title/body
-- [ ] Live Kubernetes + Prometheus read-layer
-- [ ] GitHub PR creation and Helm/Kustomize source mapping
+- [x] Live Kubernetes + Prometheus read-layer (`--from-cluster`)
+- [x] GitHub PR creation (`pr --open`)
+- [ ] Helm/Kustomize source mapping (today the patcher targets raw YAML manifests)
 - [ ] Hosted: continuous scans, policy-gated auto-PRs, weekly digest
 - [ ] Verified-savings ledger (before/after, bill-level)
 - [ ] Idle PersistentVolume detection · GPU request scanning
