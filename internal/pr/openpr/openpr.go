@@ -219,10 +219,17 @@ func patchTarget(root, rel string) (string, error) {
 	// leaf is a regular file, so the checks below would happily allow it — but
 	// the patch is written *before* the commit, so a clobbered
 	// .git/hooks/pre-commit would then execute, and .git/config controls where
-	// `push` sends data. Compared case-insensitively because macOS and Windows
-	// filesystems (and git itself) treat ".GIT" as the git directory.
+	// `push` sends data.
+	//
+	// The comparison is case-insensitive (macOS/Windows filesystems and git
+	// itself treat ".GIT" as the git directory) AND ignores trailing dots and
+	// spaces: Windows silently strips those when opening a file, so ".git." and
+	// ".git " both resolve to ".git" while dodging a plain equality check — the
+	// same normalization git had CVEs over. Residual: the 8.3 short name
+	// "GIT~1" also aliases ".git" on Windows volumes with short-name generation
+	// on; that is repo- and volume-specific and not handled here.
 	for _, seg := range strings.Split(filepath.ToSlash(filepath.Clean(rel)), "/") {
-		if strings.EqualFold(seg, ".git") {
+		if strings.EqualFold(strings.TrimRight(seg, ". "), ".git") {
 			return "", fmt.Errorf("manifest path %q is inside the git directory; refusing to write there", rel)
 		}
 	}

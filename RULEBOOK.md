@@ -33,6 +33,16 @@ When Claude Code adds, pushes, or changes anything, Codex automatically checks `
 ## Log
 Newest first. One entry per playground change.
 
+### #89 — 2026-07-09 — SECURITY: `.git` write-guard bypassed by trailing dots/spaces on Windows
+- **A sixth escape on `patchTarget`, found by another adversarial pass.** #84 blocked writes inside `.git` with `strings.EqualFold(seg, ".git")`. Windows silently strips trailing dots and spaces from filenames, so `.git.`, `.git `, and `.git..` all open the real `.git` directory while dodging that equality check — the exact normalization git itself shipped CVEs over. On Windows (a `.goreleaser.yaml` target) `--manifest .git./config` would clobber git internals despite the #84 guard.
+- **Proved before fixing:** a unit probe showed `.git`/`.GIT` caught, but `.git.`/`.git `/`.git..`/`GIT~1` all pass the old check.
+- **Fix:** compare `strings.EqualFold(strings.TrimRight(seg, ". "), ".git")` — trimming trailing dots/spaces reproduces Windows' own normalization before the match. `.gitignore`, `deploy/.gitkeep`, `gitops/app.yaml` remain allowed (pinned). Refused before any branch/commit/push/PR, like every other `patchTarget` guard.
+- **Residual, documented not fixed:** the 8.3 short name `GIT~1` also aliases `.git` on Windows volumes with short-name generation enabled. It is volume- and repo-specific (depends on creation order), so it is noted in the code comment rather than guarded — a deterministic fix would require querying the real filesystem, which the offline guard cannot.
+- **This is round 6 on one function** (#82 lexical → #83 symlinked parent → #84 `.git` → #85 hard link → #86 Windows no-op → #89 `.git` normalization). The rate of new findings has not dropped to zero; `patchTarget` should get a dedicated fuzz/property test and a focused external review before v1.0 tags.
+- **Files:** `internal/pr/openpr/{openpr.go,openpr_test.go}`.
+- **Verified:** `gofmt` clean; `make ci` green (24 packages); `GOOS=windows GOARCH=amd64 go build ./...` ok; the `.git`-variant and git-like-filename tests both green.
+- **Codex status:** ⬜ awaiting review (hardens Codex-reviewed #84/#86).
+
 ### #88 — 2026-07-09 — Codex review: #86/#87 updates + release-doc consistency
 - **Review scope:** checked the new Windows hard-link implementation (#86), the real GitHub PR validation report (#87), the module rename to `github.com/Karthikbangari/kubeloop-`, and the release-facing docs.
 - **Verdict on #86:** approved with the documented caveat. The Windows hard-link check now fails closed instead of silently no-oping, uses a metadata-only handle, and is compile/vet verified for `GOOS=windows`. It still has not executed on Windows, so the remaining risk is a false refusal on Windows, not an unsafe overwrite.

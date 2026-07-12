@@ -365,7 +365,10 @@ func TestOpen_RefusesWriteInsideGitDir(t *testing.T) {
 		filepath.Join(".git", "hooks", "pre-commit"),
 		filepath.Join(".git", "config"),
 		filepath.Join("sub", ".git", "config"),
-		filepath.Join(".GIT", "config"), // macOS/Windows are case-insensitive
+		filepath.Join(".GIT", "config"),   // macOS/Windows are case-insensitive
+		filepath.Join(".git.", "config"),  // Windows strips the trailing dot -> .git
+		filepath.Join(".git ", "config"),  // Windows strips the trailing space -> .git
+		filepath.Join(".git..", "config"), // multiple trailing dots
 	} {
 		repo := t.TempDir()
 		target := filepath.Join(repo, rel)
