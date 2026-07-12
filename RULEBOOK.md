@@ -33,6 +33,16 @@ When Claude Code adds, pushes, or changes anything, Codex automatically checks `
 ## Log
 Newest first. One entry per playground change.
 
+### #90 — 2026-07-09 — `patchTarget` fuzz harness: assert the safety contract across the whole input space
+- **Why:** six hand-found escapes on `patchTarget` (#82–#86, #89), and #89's rate of new findings had not dropped to zero. Manual attacks prove individual holes; they can't prove absence. This asserts the *invariant* instead of enumerating attacks.
+- **What:** `FuzzPatchTarget` builds a hostile checkout — a real `.git` dir, a symlinked leaf and a symlinked directory pointing outside, a hard link to an outside file, plus legitimate nested and git-like files — then fuzzes the manifest path. The contract: **if `patchTarget` returns success, the returned path (symlinks resolved) is a regular file that genuinely lives inside the repo and not inside `.git`**; it also simulates the write and asserts no off-limits file (git internals, outside files) changed. Any rejection is acceptable — only a *successful escape* fails.
+- **Double duty:** the seed corpus encodes all six known escapes plus legit paths and runs on every `go test` — a permanent regression suite (guards against a silent re-open of any prior hole). `-fuzz` turns the same test into an active search.
+- **Result:** seed corpus green; **~81k executions across ~165s of active fuzzing (45s + 120s) found no seventh escape** — PASS, no failing corpus written to `testdata/`. This is the first *evidence of absence* for this function, not just absence of evidence.
+- **Honest scope:** fuzzing ran on macOS (unix build tags), so it exercises the lexical, symlink, hard-link and `.git`-normalization guards but not the Windows-specific `syscall` paths (`hardlink_windows.go`), which remain compile-verified only. A run on real Windows would extend the guarantee.
+- **Files:** `internal/pr/openpr/patchtarget_fuzz_test.go`.
+- **Verified:** `gofmt` clean; `make ci` green (seed corpus runs as a normal test); 165s `-fuzz` clean.
+- **Codex status:** ⬜ awaiting review.
+
 ### #89 — 2026-07-09 — SECURITY: `.git` write-guard bypassed by trailing dots/spaces on Windows
 - **A sixth escape on `patchTarget`, found by another adversarial pass.** #84 blocked writes inside `.git` with `strings.EqualFold(seg, ".git")`. Windows silently strips trailing dots and spaces from filenames, so `.git.`, `.git `, and `.git..` all open the real `.git` directory while dodging that equality check — the exact normalization git itself shipped CVEs over. On Windows (a `.goreleaser.yaml` target) `--manifest .git./config` would clobber git internals despite the #84 guard.
 - **Proved before fixing:** a unit probe showed `.git`/`.GIT` caught, but `.git.`/`.git `/`.git..`/`GIT~1` all pass the old check.
