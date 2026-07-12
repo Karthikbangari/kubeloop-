@@ -33,6 +33,16 @@ When Claude Code adds, pushes, or changes anything, Codex automatically checks `
 ## Log
 Newest first. One entry per playground change.
 
+### #91 — 2026-07-09 — build slice: Kustomize rendered→source mapping (slice-35, the PR-engine tail)
+- **The gap:** `internal/pr.FindSource` only handles raw single-workload YAML. Point `kubeloop pr` at a Kustomize repo and it can't find the workload's source — and if it patched a rendered file, a GitOps controller would regenerate it, so the "saving" would silently revert. This is the named v1.0-tail limitation (roadmap + `docs/architecture.md`), and the plan's intended next code (MASTER-PLAN d16–20: "Raw YAML + Kustomize solid").
+- **What:** `kustomizesource.FindSource(dir, ref)` maps a *rendered* workload back to the file that defines it. `IsKustomizeDir(dir)` detects a kustomization.
+- **Why no `kustomize build`:** for the common overlay (a `resources:` list + optional `namePrefix`/`nameSuffix`/`namespace`), the rendered name is just the source name with the affixes added — so stripping them and matching kind+name in the referenced files finds the source with **no render step and no new dependency** (yaml.v3 only, in keeping with the zero-dep ethos). Descends one `resources: ../base` level for the base/overlay shape; reads multi-document files.
+- **Refuses rather than mis-maps** — the same posture as the raw locator (#nothing-worse-than-a-wrong-prod-patch). A kustomization with **patches** (which can rename), **components**, or **generators** is rejected with a message naming the feature, because name-stripping could then map to the wrong file. Ambiguity (two files define the workload) and no-match are refusals too.
+- **Not yet:** JSON-6902/strategic-merge rename handling, remote/URL bases, and wiring into `internal/pr`/the CLI (graduation, after review). Today it's a standalone playground package.
+- **Files:** `playground/slice-35-kustomizesource/{kustomizesource.go,kustomizesource_test.go}`.
+- **Verified:** `go vet` clean, `gofmt` clean, `make ci` green (25 packages), 10 tests — simple list, prefix+suffix strip, base-dir recursion, multi-doc, patches/generators refusal, ambiguity, no-match, not-a-kustomize-dir.
+- **Codex status:** ⬜ awaiting review.
+
 ### #90 — 2026-07-09 — `patchTarget` fuzz harness: assert the safety contract across the whole input space
 - **Why:** six hand-found escapes on `patchTarget` (#82–#86, #89), and #89's rate of new findings had not dropped to zero. Manual attacks prove individual holes; they can't prove absence. This asserts the *invariant* instead of enumerating attacks.
 - **What:** `FuzzPatchTarget` builds a hostile checkout — a real `.git` dir, a symlinked leaf and a symlinked directory pointing outside, a hard link to an outside file, plus legitimate nested and git-like files — then fuzzes the manifest path. The contract: **if `patchTarget` returns success, the returned path (symlinks resolved) is a regular file that genuinely lives inside the repo and not inside `.git`**; it also simulates the write and asserts no off-limits file (git internals, outside files) changed. Any rejection is acceptable — only a *successful escape* fails.
