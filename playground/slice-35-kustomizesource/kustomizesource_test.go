@@ -57,6 +57,21 @@ func TestFindSource_StripsNamePrefixAndSuffix(t *testing.T) {
 	}
 }
 
+func TestFindSource_RefusesRenderedNameMissingAffix(t *testing.T) {
+	dir := t.TempDir()
+	write(t, dir, "kustomization.yaml", "namePrefix: prod-\nnameSuffix: -v2\nresources:\n  - deployment.yaml\n")
+	write(t, dir, "deployment.yaml", deployYAML)
+
+	if _, err := FindSource(dir, Ref{Kind: "Deployment", Name: "checkout-api-v2"}); err == nil ||
+		!strings.Contains(err.Error(), "namePrefix") {
+		t.Fatalf("want refusal when rendered name is missing prefix, got %v", err)
+	}
+	if _, err := FindSource(dir, Ref{Kind: "Deployment", Name: "prod-checkout-api"}); err == nil ||
+		!strings.Contains(err.Error(), "namePrefix") {
+		t.Fatalf("want refusal when rendered name is missing suffix, got %v", err)
+	}
+}
+
 // An overlay whose resources: points at a base directory must be followed.
 func TestFindSource_DescendsIntoBaseDir(t *testing.T) {
 	dir := t.TempDir()
@@ -91,6 +106,22 @@ func TestFindSource_RefusesGenerators(t *testing.T) {
 	write(t, dir, "deployment.yaml", deployYAML)
 	if _, err := FindSource(dir, Ref{Kind: "Deployment", Name: "checkout-api"}); err == nil || !strings.Contains(err.Error(), "generators") {
 		t.Fatalf("want a generators refusal, got %v", err)
+	}
+}
+
+func TestFindSource_RefusesTransformersThatCanRename(t *testing.T) {
+	for name, body := range map[string]string{
+		"replacements": "resources:\n  - deployment.yaml\nreplacements:\n  - source: {kind: ConfigMap, name: cfg, fieldPath: data.name}\n    targets: []\n",
+		"transformers": "resources:\n  - deployment.yaml\ntransformers:\n  - rename-transformer.yaml\n",
+		"vars":         "resources:\n  - deployment.yaml\nvars:\n  - name: NAME\n    objref: {kind: ConfigMap, name: cfg, apiVersion: v1}\n",
+	} {
+		dir := t.TempDir()
+		write(t, dir, "kustomization.yaml", body)
+		write(t, dir, "deployment.yaml", deployYAML)
+		if _, err := FindSource(dir, Ref{Kind: "Deployment", Name: "checkout-api"}); err == nil ||
+			!strings.Contains(err.Error(), "transformers/replacements") {
+			t.Fatalf("%s: want transformer refusal, got %v", name, err)
+		}
 	}
 }
 

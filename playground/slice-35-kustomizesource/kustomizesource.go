@@ -44,6 +44,9 @@ type kustomization struct {
 	PatchesStrategic   []yaml.Node `yaml:"patchesStrategicMerge"`
 	PatchesJSON6902    []yaml.Node `yaml:"patchesJson6902"`
 	Components         []string    `yaml:"components"`
+	Replacements       []yaml.Node `yaml:"replacements"`
+	Transformers       []string    `yaml:"transformers"`
+	Vars               []yaml.Node `yaml:"vars"`
 	ConfigMapGenerator []yaml.Node `yaml:"configMapGenerator"`
 	SecretGenerator    []yaml.Node `yaml:"secretGenerator"`
 }
@@ -84,7 +87,11 @@ func FindSource(dir string, ref Ref) (Source, error) {
 	}
 
 	base := ref
-	base.Name = strings.TrimSuffix(strings.TrimPrefix(ref.Name, k.NamePrefix), k.NameSuffix)
+	var ok bool
+	base.Name, ok = stripAffixes(ref.Name, k.NamePrefix, k.NameSuffix)
+	if !ok {
+		return Source{}, fmt.Errorf("rendered name %q does not match kustomization namePrefix/nameSuffix in %s", ref.Name, kustPath)
+	}
 
 	var matches []Source
 	for _, res := range append(k.Resources, k.Bases...) {
@@ -146,10 +153,23 @@ func (k kustomization) unsupported() string {
 		return "patches (which can rename resources)"
 	case len(k.Components) > 0:
 		return "components"
+	case len(k.Replacements) > 0 || len(k.Transformers) > 0 || len(k.Vars) > 0:
+		return "transformers/replacements (which can rename resources)"
 	case len(k.ConfigMapGenerator) > 0 || len(k.SecretGenerator) > 0:
 		return "generators"
 	}
 	return ""
+}
+
+func stripAffixes(name, prefix, suffix string) (string, bool) {
+	if prefix != "" && !strings.HasPrefix(name, prefix) {
+		return "", false
+	}
+	name = strings.TrimPrefix(name, prefix)
+	if suffix != "" && !strings.HasSuffix(name, suffix) {
+		return "", false
+	}
+	return strings.TrimSuffix(name, suffix), true
 }
 
 // fileDefines reports whether any YAML document in content is the workload ref.

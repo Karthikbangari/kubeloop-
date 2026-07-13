@@ -33,6 +33,16 @@ When Claude Code adds, pushes, or changes anything, Codex automatically checks `
 ## Log
 Newest first. One entry per playground change.
 
+### #92 — 2026-07-13 — Codex review: v1.0 gates + slice-35 Kustomize mapper
+- **Review scope:** #89/#90 openpr hardening, #79 `--from-cluster` CLI wiring, and post-v1.0 slice-35 (`playground/slice-35-kustomizesource`).
+- **Verdict on #89/#90:** approved. The trailing-dot/space `.git` normalization closes a real Windows alias class, and the fuzz harness now asserts the `patchTarget` safety invariant over all successful paths instead of only pinning hand-found escapes. `make ci`, Windows-target vet, and Windows compile-only test binary all pass. Windows runtime behaviour is still not executed here.
+- **Verdict on #79:** approved. The CLI source selection rejects ambiguous/misplaced flags, requires `--prometheus` before shelling out, invokes only read-only `kubectl get`, and surfaces kubectl/Prometheus failures loudly. Live success could not be re-run today because the stale `kind-kubeloop` apiserver refuses connections; the failure-mode smoke exits 1 with kubectl's connection error rather than reporting `$0 waste`.
+- **Slice-35 finding and fix:** the mapper stripped `namePrefix`/`nameSuffix` when present, but also matched a rendered name that was missing one of those affixes. That could map a workload name the overlay could not have rendered back to a source file. Added `stripAffixes` so missing required affixes are refused. Also added conservative refusals for `replacements`, `transformers`, and `vars`, which can rewrite identity.
+- **Regression:** `TestFindSource_RefusesRenderedNameMissingAffix` and `TestFindSource_RefusesTransformersThatCanRename`.
+- **Review result:** #89/#90/#79 approved for v1.0. Slice-35 approved for post-v1.0 graduation after this follow-up; it does not block the tag.
+- **Verified:** `go test ./playground/slice-35-kustomizesource ./internal/pr/openpr ./cmd/kubeloop ./internal/readlayer/clustersource` green; `make ci` green (25 packages); `GOOS=windows GOARCH=amd64 go vet ./internal/pr/openpr` green; `GOOS=windows GOARCH=amd64 go test -c ./internal/pr/openpr` green.
+- **Codex status:** ✅ approved. Tag decision is now down to accepting the known remaining external gap: 7-day Prometheus windowing.
+
 ### #91 — 2026-07-09 — build slice: Kustomize rendered→source mapping (slice-35, the PR-engine tail)
 - **The gap:** `internal/pr.FindSource` only handles raw single-workload YAML. Point `kubeloop pr` at a Kustomize repo and it can't find the workload's source — and if it patched a rendered file, a GitOps controller would regenerate it, so the "saving" would silently revert. This is the named v1.0-tail limitation (roadmap + `docs/architecture.md`), and the plan's intended next code (MASTER-PLAN d16–20: "Raw YAML + Kustomize solid").
 - **What:** `kustomizesource.FindSource(dir, ref)` maps a *rendered* workload back to the file that defines it. `IsKustomizeDir(dir)` detects a kustomization.
@@ -41,7 +51,7 @@ Newest first. One entry per playground change.
 - **Not yet:** JSON-6902/strategic-merge rename handling, remote/URL bases, and wiring into `internal/pr`/the CLI (graduation, after review). Today it's a standalone playground package.
 - **Files:** `playground/slice-35-kustomizesource/{kustomizesource.go,kustomizesource_test.go}`.
 - **Verified:** `go vet` clean, `gofmt` clean, `make ci` green (25 packages), 10 tests — simple list, prefix+suffix strip, base-dir recursion, multi-doc, patches/generators refusal, ambiguity, no-match, not-a-kustomize-dir.
-- **Codex status:** ⬜ awaiting review.
+- **Codex status:** ✅ approved after Codex follow-up #92.
 
 ### #90 — 2026-07-09 — `patchTarget` fuzz harness: assert the safety contract across the whole input space
 - **Why:** six hand-found escapes on `patchTarget` (#82–#86, #89), and #89's rate of new findings had not dropped to zero. Manual attacks prove individual holes; they can't prove absence. This asserts the *invariant* instead of enumerating attacks.
@@ -51,7 +61,7 @@ Newest first. One entry per playground change.
 - **Honest scope:** fuzzing ran on macOS (unix build tags), so it exercises the lexical, symlink, hard-link and `.git`-normalization guards but not the Windows-specific `syscall` paths (`hardlink_windows.go`), which remain compile-verified only. A run on real Windows would extend the guarantee.
 - **Files:** `internal/pr/openpr/patchtarget_fuzz_test.go`.
 - **Verified:** `gofmt` clean; `make ci` green (seed corpus runs as a normal test); 165s `-fuzz` clean.
-- **Codex status:** ⬜ awaiting review.
+- **Codex status:** ✅ approved after Codex follow-up #92.
 
 ### #89 — 2026-07-09 — SECURITY: `.git` write-guard bypassed by trailing dots/spaces on Windows
 - **A sixth escape on `patchTarget`, found by another adversarial pass.** #84 blocked writes inside `.git` with `strings.EqualFold(seg, ".git")`. Windows silently strips trailing dots and spaces from filenames, so `.git.`, `.git `, and `.git..` all open the real `.git` directory while dodging that equality check — the exact normalization git itself shipped CVEs over. On Windows (a `.goreleaser.yaml` target) `--manifest .git./config` would clobber git internals despite the #84 guard.
@@ -61,7 +71,7 @@ Newest first. One entry per playground change.
 - **This is round 6 on one function** (#82 lexical → #83 symlinked parent → #84 `.git` → #85 hard link → #86 Windows no-op → #89 `.git` normalization). The rate of new findings has not dropped to zero; `patchTarget` should get a dedicated fuzz/property test and a focused external review before v1.0 tags.
 - **Files:** `internal/pr/openpr/{openpr.go,openpr_test.go}`.
 - **Verified:** `gofmt` clean; `make ci` green (24 packages); `GOOS=windows GOARCH=amd64 go build ./...` ok; the `.git`-variant and git-like-filename tests both green.
-- **Codex status:** ⬜ awaiting review (hardens Codex-reviewed #84/#86).
+- **Codex status:** ✅ approved after Codex follow-up #92.
 
 ### #88 — 2026-07-09 — Codex review: #86/#87 updates + release-doc consistency
 - **Review scope:** checked the new Windows hard-link implementation (#86), the real GitHub PR validation report (#87), the module rename to `github.com/Karthikbangari/kubeloop-`, and the release-facing docs.
@@ -69,7 +79,7 @@ Newest first. One entry per playground change.
 - **Verdict on #87:** approved. The first real 201 GitHub success path was correctly aimed at a throwaway repo, verified from GitHub's side, and cleaned up. No product code changed in that validation.
 - **Docs fixed during review:** README still described v0.1 as offline-only and called the PR engine "planned"; architecture still said the GitHub call was unvalidated; HANDOFF still used the old module path and pre-#87 status. Updated those to match the current shipped behavior and remaining risk.
 - **Verified:** `make ci` green; `GOOS=windows GOARCH=amd64 go vet ./internal/pr/openpr` green; `GOOS=windows GOARCH=amd64 go test -c ./internal/pr/openpr` green; no stale `github.com/kubeloop/kubeloop` imports in Go files or `go.mod`.
-- **Codex status:** ✅ #86/#87 approved. Remaining non-doc gap: 7-day Prometheus windowing; remaining review marker: #79 CLI wiring.
+- **Codex status:** ✅ #86/#87 approved. Remaining non-doc gap: 7-day Prometheus windowing.
 
 ### #87 — 2026-07-08 — LIVE VALIDATION: `pr --open` opened a real pull request on GitHub. The last ⚠ is closed.
 - **Setup:** the user authorised reading the PAT that `osxkeychain` already stores for `github.com` (used implicitly by every `git push` this session) — held in a shell variable for the API calls, never printed, echoed, logged, or written to disk. Scopes confirmed read-only first: `repo` present, `delete_repo` **absent**. Target was a **throwaway private repo** (`Karthikbangari/kubeloop-prtest`), not `kubeloop-` — five consecutive review rounds (#82–#86) each found an escape in this exact code path, and a sixth belonged in a scratch repo.
@@ -190,7 +200,7 @@ Newest first. One entry per playground change.
 - **Files:** moved `playground/slice-{29,30,31}-*/` → `internal/readlayer/{kubeclient,promql,clustersource}/`; `internal/readlayer/promclient/{promclient.go,promclient_test.go}`; `cmd/kubeloop/{main.go,main_test.go}` (`source` struct + `--from-cluster`); docs: `README.md`, `docs/architecture.md`, `playground/README.md`.
 - **Verified:** `go vet` clean, `gofmt` clean, `make ci` green (23 packages). 6 new CLI tests + 1 promclient regression test.
 - **Still gated:** 7-day windowing (needs a week-old cluster); real GitHub PR creation (needs a token).
-- **Codex status:** ⬜ awaiting review of the CLI wiring (the graduated slices themselves were approved in #78).
+- **Codex status:** ✅ approved after Codex follow-up #92.
 
 ### #78 — 2026-07-08 — Codex review: reject non-finite Prometheus samples before sizing
 - **Finding:** `promusage.Scalar` accepted Prometheus sample strings `NaN`, `+Inf`, and `-Inf` because `strconv.ParseFloat` treats them as valid floats. Those non-finite values then flowed into `promusage.AssembleUsage`, where float-to-int conversion could turn a bad Prometheus sample into plausible-looking usage instead of aborting the live read-layer.

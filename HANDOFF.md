@@ -94,13 +94,10 @@ Full map in `docs/architecture.md`. Layering (leaves → composition):
 - ✅ **PR engine** (#75, #76, #80, #81, #87) → `pr --open`. Local git validated against real git;
   the GitHub POST 201 path validated against a throwaway GitHub repo.
 
-## What's left (1 validation + review debt — no unbuilt code)
+## What's left (1 validation — no unbuilt code)
 1. **Prove 7-day windowing.** Needs a cluster that has been running a week. A fresh kind cluster
    confirms metric names, labels, and the pod selector, but every workload is (correctly) excluded
    as "<7d of history", so `[7d:5m]` behaviour stays unproven.
-2. **Review debt.** #79's `--from-cluster` CLI wiring is still marked awaiting review in RULEBOOK,
-   though the underlying live-reader slices were approved.
-
 Then tag v1.0.0. Plan "loops" B/C/D (launch, revenue, expansion) are business, not code.
 
 ## Development workflow (important — this is how the repo has been built)
@@ -112,8 +109,8 @@ Two agents, gated by `RULEBOOK.md`:
 see current state and any Codex notes. Bug-fixes to already-graduated code are made directly and
 reviewed after. `playground/` is currently empty — the next slice starts there.
 
-Caveat worth knowing: #79's `--from-cluster` CLI wiring is still marked awaiting review even though
-the underlying live-reader slices were approved.
+Caveat worth knowing: the only remaining technical uncertainty is 7-day Prometheus windowing on a
+week-old cluster.
 
 ## Known limitations (see docs/architecture.md "Known limitations")
 - Patcher: single-document, 2-space raw-YAML manifests; verifies identity; preserves limits/comments/quote-style.

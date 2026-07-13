@@ -3,8 +3,8 @@
 // It is the live twin of dirsource, and lands on the same
 // readlayer.ToScanInput assembly via manifestsource.FromWorkload.
 //
-// ⚠ The query strings it issues are NOT yet validated against a live Prometheus
-// (see the promql package). The composition below is proven offline.
+// The query strings it issues were validated against a live Prometheus in the
+// promql slice; this package owns the composition and no-data/error behavior.
 package clustersource
 
 import (
