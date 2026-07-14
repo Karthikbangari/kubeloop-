@@ -33,6 +33,14 @@ When Claude Code adds, pushes, or changes anything, Codex automatically checks `
 ## Log
 Newest first. One entry per playground change.
 
+### #93 — 2026-07-14 — v1.0.1 fix: `go install`ed binaries reported `--version dev`
+- **Found by validating the v1.0.0 release, not by a test:** `go install github.com/Karthikbangari/kubeloop-/cmd/kubeloop@v1.0.0` works (the module rename paid off), but the installed binary reported `kubeloop dev`. GoReleaser injects the version via `-ldflags` at release time; `go install` applies no ldflags, so `main.version` stayed at its `"dev"` default. The README now leads with `go install`, so the install path it recommends undercut the `--version` it advertises.
+- **Fix:** `resolveVersion()` — when the ldflags value is still `"dev"`, fall back to `debug.ReadBuildInfo().Main.Version`. Proven that a proxy-installed binary embeds its module version (`go version -m` on the `@v1.0.0` install shows `mod … v1.0.0`), so `ReadBuildInfo` returns `v1.0.0` for it. A release binary (ldflags set) is unaffected; a plain `go build`/`go run` reads `(devel)` there and correctly stays `dev`.
+- **Direct edit, not a playground slice** — a fix to already-shipped `cmd/kubeloop`, per the workflow's "bug-fixes to graduated code are made directly and reviewed after".
+- **Files:** `cmd/kubeloop/{main.go,main_test.go}` (+ `TestResolveVersion`).
+- **Verified:** `gofmt` clean; `make ci` green (25 packages). End-to-end `@v1.0.1` reporting confirmed after the tag (below).
+- **Codex status:** ⬜ awaiting review.
+
 ### #92 — 2026-07-13 — Codex review: v1.0 gates + slice-35 Kustomize mapper
 - **Review scope:** #89/#90 openpr hardening, #79 `--from-cluster` CLI wiring, and post-v1.0 slice-35 (`playground/slice-35-kustomizesource`).
 - **Verdict on #89/#90:** approved. The trailing-dot/space `.git` normalization closes a real Windows alias class, and the fuzz harness now asserts the `patchTarget` safety invariant over all successful paths instead of only pinning hand-found escapes. `make ci`, Windows-target vet, and Windows compile-only test binary all pass. Windows runtime behaviour is still not executed here.

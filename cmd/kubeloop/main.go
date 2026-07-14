@@ -17,6 +17,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"runtime/debug"
 	"strings"
 	"time"
 
@@ -40,6 +41,23 @@ import (
 // (see .goreleaser.yaml); "dev" for local/`go build` binaries.
 var version = "dev"
 
+// resolveVersion returns the release-stamped version when present, otherwise
+// the module version recorded in the build info. A binary produced by
+// `go install <module>@v1.0.0` carries no ldflags, so main.version stays "dev";
+// debug.ReadBuildInfo reports "v1.0.0" for it, which is the honest answer. A
+// plain `go build`/`go run` reports "(devel)" there, which we treat as dev.
+func resolveVersion() string {
+	if version != "dev" {
+		return version
+	}
+	if info, ok := debug.ReadBuildInfo(); ok {
+		if v := info.Main.Version; v != "" && v != "(devel)" {
+			return v
+		}
+	}
+	return version
+}
+
 func main() {
 	if err := Run(os.Args[1:], os.Stdout); err != nil {
 		fmt.Fprintln(os.Stderr, "kubeloop:", err)
@@ -55,7 +73,7 @@ func Run(args []string, out io.Writer) error {
 	if len(args) > 0 {
 		switch args[0] {
 		case "--version", "-version", "version":
-			fmt.Fprintf(out, "kubeloop %s\n", version)
+			fmt.Fprintf(out, "kubeloop %s\n", resolveVersion())
 			return nil
 		case "pr":
 			return runPR(args[1:], out)

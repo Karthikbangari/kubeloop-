@@ -494,6 +494,27 @@ func TestRun_Version(t *testing.T) {
 	}
 }
 
+// resolveVersion prefers the ldflags-stamped value; when that is the "dev"
+// default (a `go install`ed binary), it falls back to the module version from
+// build info so `--version` isn't a bare "dev".
+func TestResolveVersion(t *testing.T) {
+	orig := version
+	defer func() { version = orig }()
+
+	version = "v1.2.3" // release build: ldflags win outright
+	if got := resolveVersion(); got != "v1.2.3" {
+		t.Errorf("stamped version = %q, want v1.2.3", got)
+	}
+
+	// dev default: fall back to build info. In `go test` the main module version
+	// is "(devel)", which resolveVersion treats as dev — so it must not panic and
+	// must return a non-empty string (either a real module version or "dev").
+	version = "dev"
+	if got := resolveVersion(); got == "" {
+		t.Error("resolveVersion returned empty for a dev build")
+	}
+}
+
 // ---- `kubeloop pr --open` ----
 
 func TestRun_PRRequiresOutOrOpen(t *testing.T) {
