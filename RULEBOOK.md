@@ -38,7 +38,7 @@ Newest first. One entry per playground change.
 - **Fix:** `resolveVersion()` — when the ldflags value is still `"dev"`, fall back to `debug.ReadBuildInfo().Main.Version`. Proven that a proxy-installed binary embeds its module version (`go version -m` on the `@v1.0.0` install shows `mod … v1.0.0`), so `ReadBuildInfo` returns `v1.0.0` for it. A release binary (ldflags set) is unaffected; a plain `go build`/`go run` reads `(devel)` there and correctly stays `dev`.
 - **Direct edit, not a playground slice** — a fix to already-shipped `cmd/kubeloop`, per the workflow's "bug-fixes to graduated code are made directly and reviewed after".
 - **Files:** `cmd/kubeloop/{main.go,main_test.go}` (+ `TestResolveVersion`).
-- **Verified:** `gofmt` clean; `make ci` green (25 packages). End-to-end `@v1.0.1` reporting confirmed after the tag (below).
+- **Verified end to end:** `gofmt` clean; `make ci` green (25 packages). **v1.0.1 tagged and released** (GoReleaser run `completed/success`, 6 archives + checksums). Post-release proof: `go install …/cmd/kubeloop@v1.0.1` now reports `kubeloop v1.0.1` (was `dev`), and the release binary still stamps `kubeloop 1.0.1` via ldflags — both paths correct.
 - **Codex status:** ⬜ awaiting review.
 
 ### #92 — 2026-07-13 — Codex review: v1.0 gates + slice-35 Kustomize mapper
