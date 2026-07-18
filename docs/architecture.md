@@ -120,9 +120,9 @@ mapped to an actionable message with no token leak.
   `[7d:5m]` subquery shape never actually runs.
 - **The Windows hard-link guard** (`internal/pr/openpr/hardlink_windows.go`) is
   compile-verified only; it has never executed on Windows. It fails closed.
-- **PR engine tail**: Helm/Kustomize rendered-to-source mapping. The raw-YAML locator, patcher, composer, prepare, local git, GitHub PR creation, and guards exist in `internal/pr`.
+- **PR engine tail**: **Helm** rendered-to-source mapping. Kustomize mapping shipped (`internal/pr/kustomizesource`, backs `pr --kustomize-dir`); the raw-YAML locator, patcher, composer, prepare, local git, GitHub PR creation, and guards exist in `internal/pr`.
 - **Hosted tier**: continuous scans, policy-gated auto-PRs, verified-savings ledger.
 
 ## Known limitations (revisit with the live read-layer)
 - **Patch baseline**: `kubeloop pr`'s reduce-only decision compares the *scan's* current request against the proposal, not the *manifest's* current value. In the intended live flow these are the same (scan reads the cluster; GitOps keeps cluster = manifest), so it's safe. Offline, a `--from-file` input and a `--manifest` can diverge, and a manifest already lower than the proposal could be raised.
-- **Manifest assumptions**: the patcher/locator handle single-document, 2-space raw-YAML manifests, verify identity before editing, and preserve `limits`/comments/quote-style. Multi-document files and Helm/Kustomize source mapping are the tool-backed tail.
+- **Manifest assumptions**: the patcher/locator handle single-document, 2-space raw-YAML manifests, verify identity before editing, and preserve `limits`/comments/quote-style. Kustomize source mapping ships for the common overlay (resources list + namePrefix/nameSuffix), refusing rename-capable overlays; multi-document patching and Helm source mapping remain the tool-backed tail.

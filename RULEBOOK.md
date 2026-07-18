@@ -33,6 +33,17 @@ When Claude Code adds, pushes, or changes anything, Codex automatically checks `
 ## Log
 Newest first. One entry per playground change.
 
+### #94 — 2026-07-17 — GRADUATE the Kustomize mapper (slice-35) + wire `pr --kustomize-dir`
+- **Gate:** Codex approved slice-35 for post-v1.0 graduation in #92 (after adding the affix and rename-transform refusals). `playground/` is now empty.
+- **What:** `playground/slice-35-kustomizesource` → `internal/pr/kustomizesource` (git mv, history preserved). `pr --kustomize-dir <dir>` locates a workload's source manifest in a Kustomize tree instead of `--manifest`.
+- **The rendered-vs-source name problem, handled:** the scan reports the *rendered* name (`prod-checkout-api`); the source file defines the *base* name (`checkout-api`). `Source` now carries the resolved base `Name`, and the CLI patches with that name and **no namespace** — because Kustomize commonly sets namespace centrally and the source file omits it, so `Patch`'s namespace check (only enforced when the target sets one) would otherwise reject a legitimate source. Verified against `patcher.go`, not assumed.
+- **Flag discipline:** exactly one of `--manifest` / `--kustomize-dir`; both, or neither, errors. Mirrors the source-selection posture already used by `scan`.
+- **Verified end to end (real Kustomize tree, not just units):** an overlay with `namePrefix: prod-` over a `../base` → `kubeloop pr --kustomize-dir overlay --workload prod-checkout-api --out …` patched **`base/deployment.yaml`** (the source of truth), setting the base-named workload to `cpu: 576m` / `memory: 428Mi`, and the output names the source file — not a rendered one a GitOps controller would regenerate. This closes the failure mode the whole feature exists for.
+- **Docs:** README `pr` section gains the `--kustomize-dir` example; `docs/architecture.md` moves Kustomize from "tail" to shipped, leaving Helm + multi-doc as the remaining tail.
+- **Files:** `internal/pr/kustomizesource/*` (graduated), `cmd/kubeloop/{main.go,main_test.go}` (`--kustomize-dir`, `resolvePRSource`, 3 CLI tests), `README.md`, `docs/architecture.md`.
+- **Verified:** `go vet` clean, `gofmt` clean, `make ci` green (25 packages); the graduated package's 11 tests + 3 new CLI tests pass.
+- **Codex status:** ⬜ awaiting review.
+
 ### #93 — 2026-07-14 — v1.0.1 fix: `go install`ed binaries reported `--version dev`
 - **Found by validating the v1.0.0 release, not by a test:** `go install github.com/Karthikbangari/kubeloop-/cmd/kubeloop@v1.0.0` works (the module rename paid off), but the installed binary reported `kubeloop dev`. GoReleaser injects the version via `-ldflags` at release time; `go install` applies no ldflags, so `main.version` stayed at its `"dev"` default. The README now leads with `go install`, so the install path it recommends undercut the `--version` it advertises.
 - **Fix:** `resolveVersion()` — when the ldflags value is still `"dev"`, fall back to `debug.ReadBuildInfo().Main.Version`. Proven that a proxy-installed binary embeds its module version (`go version -m` on the `@v1.0.0` install shows `mod … v1.0.0`), so `ReadBuildInfo` returns `v1.0.0` for it. A release binary (ldflags set) is unaffected; a plain `go build`/`go run` reads `(devel)` there and correctly stays `dev`.

@@ -26,10 +26,15 @@ import (
 // Ref identifies the rendered workload to trace back to source.
 type Ref struct{ Kind, Name, Namespace string }
 
-// Source is the located source file: its path (for the PR) and raw content.
+// Source is the located source file: its path (for the PR), raw content, and
+// the source-side workload name. Name is the rendered name with the overlay's
+// namePrefix/nameSuffix stripped — i.e. the name as it appears *in the file* —
+// so a caller patching the source targets the right object, not the rendered
+// name the cluster reported.
 type Source struct {
 	Path    string
 	Content []byte
+	Name    string
 }
 
 // kustomization is the subset of kustomization.yaml we read.
@@ -114,7 +119,7 @@ func FindSource(dir string, ref Ref) (Source, error) {
 			return Source{}, err
 		}
 		if fileDefines(content, base) {
-			matches = append(matches, Source{Path: p, Content: content})
+			matches = append(matches, Source{Path: p, Content: content, Name: base.Name})
 		}
 	}
 

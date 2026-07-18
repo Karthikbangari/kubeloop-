@@ -24,6 +24,7 @@ import (
 	pr "github.com/Karthikbangari/kubeloop-/internal/pr"
 	"github.com/Karthikbangari/kubeloop-/internal/pr/ghclient"
 	"github.com/Karthikbangari/kubeloop-/internal/pr/gitrepo"
+	"github.com/Karthikbangari/kubeloop-/internal/pr/kustomizesource"
 	"github.com/Karthikbangari/kubeloop-/internal/pr/openpr"
 	"github.com/Karthikbangari/kubeloop-/internal/pr/quantity"
 	"github.com/Karthikbangari/kubeloop-/internal/readlayer/clustersource"
@@ -149,6 +150,7 @@ func runPR(args []string, out io.Writer) error {
 	outFile := fs.String("out", "", "write patched manifest to this path")
 	var manifests manifestFiles
 	fs.Var(&manifests, "manifest", "manifest file to search; repeat for multiple files")
+	kustomizeDir := fs.String("kustomize-dir", "", "Kustomize directory to locate the workload's source manifest in (instead of --manifest)")
 	open := fs.Bool("open", false, "open a pull request on GitHub (requires GITHUB_TOKEN with `repo` scope)")
 	repoDir := fs.String("repo-dir", ".", "git checkout containing the manifest, used with --open")
 	base := fs.String("base", "", "base branch for the pull request (default: the checked-out branch)")
@@ -156,8 +158,14 @@ func runPR(args []string, out io.Writer) error {
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
-	if *fromFile == "" || *workload == "" || *container == "" || len(manifests) == 0 {
-		return fmt.Errorf("pr requires --from-file, --manifest, --workload, --container, and one of --out or --open")
+	if *fromFile == "" || *workload == "" || *container == "" {
+		return fmt.Errorf("pr requires --from-file, --workload, --container, a source (--manifest or --kustomize-dir), and one of --out or --open")
+	}
+	switch {
+	case len(manifests) == 0 && *kustomizeDir == "":
+		return fmt.Errorf("pr requires a source: --manifest (repeatable) or --kustomize-dir")
+	case len(manifests) > 0 && *kustomizeDir != "":
+		return fmt.Errorf("use either --manifest or --kustomize-dir, not both")
 	}
 	// --out writes the patched manifest locally; --open branches, commits,
 	// pushes, and opens a pull request. Requiring exactly one keeps the side
@@ -198,11 +206,10 @@ func runPR(args []string, out io.Writer) error {
 	if reduceMem > 0 {
 		proposedMem = quantity.Mem(reduceMem)
 	}
-	files, err := loadManifestFiles(manifests)
+	files, ref, err := resolvePRSource(manifests, *kustomizeDir, *kind, row.Name, row.Namespace)
 	if err != nil {
 		return err
 	}
-	ref := pr.Ref{Kind: *kind, Name: row.Name, Namespace: row.Namespace}
 	prepared, err := pr.Prepare(pr.Request{
 		Files:       files,
 		Ref:         ref,
@@ -282,6 +289,28 @@ func openPullRequest(ctx context.Context, out io.Writer, prepared pr.Prepared, r
 	}
 	fmt.Fprintf(out, "Opened pull request #%d\n  %s\n  branch: %s\n", res.PRNumber, res.PRURL, res.Branch)
 	return nil
+}
+
+// resolvePRSource locates the workload's source manifest and the identity to
+// patch it by. For raw --manifest files, the patch targets the scanned
+// (namespaced) identity directly. For --kustomize-dir, the mapper traces the
+// rendered workload back to its source file: the patch then targets the
+// source-side name (namePrefix/nameSuffix stripped) with no namespace, because
+// Kustomize commonly sets the namespace centrally and the source file omits it.
+func resolvePRSource(manifests []string, kustomizeDir, kind, name, namespace string) ([]pr.File, pr.Ref, error) {
+	if kustomizeDir != "" {
+		src, err := kustomizesource.FindSource(kustomizeDir, kustomizesource.Ref{Kind: kind, Name: name, Namespace: namespace})
+		if err != nil {
+			return nil, pr.Ref{}, err
+		}
+		files := []pr.File{{Path: src.Path, Content: src.Content}}
+		return files, pr.Ref{Kind: kind, Name: src.Name}, nil
+	}
+	files, err := loadManifestFiles(manifests)
+	if err != nil {
+		return nil, pr.Ref{}, err
+	}
+	return files, pr.Ref{Kind: kind, Name: name, Namespace: namespace}, nil
 }
 
 func loadManifestFiles(paths []string) ([]pr.File, error) {

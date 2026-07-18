@@ -18,6 +18,16 @@ const sample = `[
  {"Namespace":"batch","Name":"nightly","Usage":{"P95CPU":100,"P99CPU":120,"MaxMem":104857600},"Meta":{"Kind":"CronJob","HistoryDays":30}}
 ]`
 
+func mustWrite(t *testing.T, path, body string) {
+	t.Helper()
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func sampleFile(t *testing.T) string {
 	t.Helper()
 	p := filepath.Join(t.TempDir(), "in.json")
@@ -512,6 +522,78 @@ func TestResolveVersion(t *testing.T) {
 	version = "dev"
 	if got := resolveVersion(); got == "" {
 		t.Error("resolveVersion returned empty for a dev build")
+	}
+}
+
+// ---- `kubeloop pr --kustomize-dir` ----
+
+// The scan reports the rendered name (prod-checkout-api); the source file
+// defines the bare name. --kustomize-dir must trace it back and patch the
+// SOURCE file, not a rendered one a GitOps controller would regenerate.
+func TestRun_PRKustomizeDir(t *testing.T) {
+	dir := t.TempDir()
+	src := `apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: checkout-api
+spec:
+  template:
+    spec:
+      containers:
+        - name: app
+          image: nginx
+          resources:
+            requests:
+              cpu: 2000m
+              memory: 512Mi
+`
+	if err := os.MkdirAll(filepath.Join(dir, "base"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	mustWrite(t, filepath.Join(dir, "base", "deployment.yaml"), src)
+	mustWrite(t, filepath.Join(dir, "base", "kustomization.yaml"), "resources:\n  - deployment.yaml\n")
+	mustWrite(t, filepath.Join(dir, "overlay", "kustomization.yaml"), "namePrefix: prod-\nresources:\n  - ../base\n")
+
+	scan := filepath.Join(dir, "scan.json")
+	mustWrite(t, scan, `[{"Namespace":"shop","Name":"prod-checkout-api","Replicas":1,"Current":{"CPU":2000,"Mem":536870912},"Usage":{"P95CPU":410,"P99CPU":480,"MaxMem":314572800},"Meta":{"Kind":"Deployment","HistoryDays":30}}]`)
+	outPath := filepath.Join(dir, "patched.yaml")
+
+	var out bytes.Buffer
+	err := Run([]string{"pr", "--from-file", scan, "--kustomize-dir", filepath.Join(dir, "overlay"),
+		"--workload", "prod-checkout-api", "--container", "app", "--out", outPath}, &out)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The patched file is the base source, with the base name and reduced CPU.
+	patched, err := os.ReadFile(outPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := string(patched)
+	if !strings.Contains(s, "name: checkout-api") || !strings.Contains(s, "cpu: 576m") {
+		t.Errorf("source not patched correctly:\n%s", s)
+	}
+	if !strings.Contains(out.String(), "base/deployment.yaml") {
+		t.Errorf("output should name the source file, got:\n%s", out.String())
+	}
+}
+
+func TestRun_PRRejectsBothManifestAndKustomize(t *testing.T) {
+	dir := t.TempDir()
+	m := filepath.Join(dir, "d.yaml")
+	mustWrite(t, m, prManifest)
+	err := Run([]string{"pr", "--from-file", sampleFile(t), "--manifest", m, "--kustomize-dir", dir,
+		"--workload", "checkout-api", "--container", "app", "--out", filepath.Join(dir, "o.yaml")}, &bytes.Buffer{})
+	if err == nil || !strings.Contains(err.Error(), "not both") {
+		t.Fatalf("want mutual-exclusion error, got %v", err)
+	}
+}
+
+func TestRun_PRRequiresASource(t *testing.T) {
+	err := Run([]string{"pr", "--from-file", sampleFile(t), "--workload", "checkout-api",
+		"--container", "app", "--out", "/tmp/o.yaml"}, &bytes.Buffer{})
+	if err == nil || !strings.Contains(err.Error(), "--manifest") {
+		t.Fatalf("want a source-required error naming --manifest/--kustomize-dir, got %v", err)
 	}
 }
 
